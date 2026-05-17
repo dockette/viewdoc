@@ -13,8 +13,14 @@
 
 <p align=center>
   <a href="https://hub.docker.com/r/dockette/viewdoc/"><img src="https://badgen.net/docker/pulls/dockette/viewdoc"></a>
-  <a href="https://bit.ly/ctteg"><img src="https://badgen.net/badge/support/gitter/cyan"></a>
   <a href="https://github.com/sponsors/f3l1x"><img src="https://badgen.net/badge/sponsor/donations/F96854"></a>
+</p>
+
+-----
+
+<p align=center>
+  <img src=".docs/kasm.png" alt="Kasm desktop viewer" width="49%"/>
+  <img src=".docs/webtop.png" alt="Webtop desktop viewer" width="49%"/>
 </p>
 
 -----
