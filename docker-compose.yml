@@ -1,0 +1,64 @@
+services:
+  control-center:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dockette/viewdoc:control-center
+    environment:
+      # Kasm runs KasmVNC on :6901 (https, self-signed; proxy skips verify).
+      # Webtop runs nginx + kclient on :3000 (plain http). Webtop's kclient
+      # requires a secure context (HTTPS or localhost) — the proxy patches
+      # the JS at response time to bypass the check (see internal/proxy/proxy.go).
+      VIEWER_SLOTS: "https://viewer-kasm-1:6901,https://viewer-kasm-2:6901,viewer-webtop-1:3000,viewer-webtop-2:3000"
+      TLS_ADDR: ":8443"
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+      # No per-slot ports — slots are mounted same-origin at /slot/{i}/ on
+      # the main listener, which is what makes iframe audio work.
+    depends_on:
+      - viewer-kasm-1
+      - viewer-kasm-2
+      - viewer-webtop-1
+      - viewer-webtop-2
+    networks: [viewdoc]
+    restart: unless-stopped
+
+  viewer-kasm-1: &kasm
+    build:
+      context: .
+      dockerfile: .docker/kasm/Dockerfile
+    image: dockette/viewdoc:viewer-kasm
+    shm_size: "512m"
+    environment:
+      # VNC_PW seeds ~/.kasmpasswd (the entrypoint requires the file exists);
+      # VNCOPTIONS=-disableBasicAuth tells KasmVNC to skip the basic-auth
+      # challenge so the iframe loads without a browser prompt. KasmVNC has
+      # no kasmvnc.yaml toggle for this and no ?password= URL mechanism — the
+      # CLI flag is the only supported path.
+      VNC_PW: "viewdoc"
+      VNCOPTIONS: "-disableBasicAuth"
+    networks: [viewdoc]
+    restart: unless-stopped
+
+  viewer-kasm-2:
+    <<: *kasm
+
+  viewer-webtop-1: &webtop
+    build:
+      context: .
+      dockerfile: .docker/webtop/Dockerfile
+    image: dockette/viewdoc:viewer-webtop
+    shm_size: "512m"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Etc/UTC"
+    networks: [viewdoc]
+    restart: unless-stopped
+
+  viewer-webtop-2:
+    <<: *webtop
+
+networks:
+  viewdoc:
