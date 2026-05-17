@@ -10,7 +10,7 @@ FROM kasmweb/ubuntu-noble-desktop:1.18.0
 USER root
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends vlc xdg-utils \
+ && apt-get install -y --no-install-recommends vlc xdg-utils libreoffice \
  && rm -rf /var/lib/apt/lists/*
 
 # KasmVNC validates pem paths at boot even when require_ssl is false; the

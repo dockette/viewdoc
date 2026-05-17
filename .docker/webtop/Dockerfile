@@ -9,7 +9,7 @@ RUN go build -trimpath -ldflags="-s -w" -o /out/sidecar ./cmd/sidecar
 FROM lscr.io/linuxserver/webtop:ubuntu-xfce
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends vlc xdg-utils ca-certificates \
+ && apt-get install -y --no-install-recommends vlc xdg-utils ca-certificates libreoffice \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=sidecar /out/sidecar /usr/local/bin/viewdoc-sidecar

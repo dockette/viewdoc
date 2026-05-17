@@ -56,6 +56,13 @@ case "$ext" in
     # Access Policy" modal, which otherwise blocks playback until clicked.
     run vlc --no-qt-privacy-ask --no-video-title-show "$url"
     ;;
+  doc|docx|odt|rtf|xls|xlsx|ods|csv|ppt|pptx|odp)
+    log "dispatch=soffice ext=$ext url=$url"
+    # soffice handles http(s) URLs natively via UCB. --view opens read-only,
+    # --norestore kills the "recover document?" prompt after a previous
+    # session, --nologo suppresses the splash.
+    run soffice --view --norestore --nologo "$url"
+    ;;
   *)
     # Chromium with --no-sandbox: Kasm's firefox 144 trips over a stale
     # profiles.ini Locked=1, and user namespaces are blocked in the container.

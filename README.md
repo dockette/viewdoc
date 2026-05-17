@@ -23,11 +23,28 @@
 
 Embedding rich file viewers in your product is a thousand papercuts: PDF.js for some types, an office viewer for others, a media player for the rest — each with its own quirks, sandbox story, and asset list. **Viewdoc skips it.** Open a real desktop in a tab, let the *desktop* open the file with its native app, and stream the pixels back. One iframe, every file type.
 
-```
-browser ── http://localhost:8080/?url=… ──► control-center (Go)
-                                              ├── reverse-proxy ──► viewer-*:6901  (KasmVNC)
-                                              └── HTTP POST ─────► viewer-*:7000   (sidecar)
-                                                                       └── viewdoc.sh → firefox / vlc / xdg-open
+```mermaid
+flowchart LR
+    browser["Browser<br/>localhost:8080/?url=…"]
+
+    subgraph cc["control-center (Go)"]
+        proxy["reverse-proxy<br/>/slot/{i}/*"]
+        api["POST /api/slot/{i}/params"]
+    end
+
+    subgraph viewer["viewer-i (Kasm / Webtop)"]
+        novnc["KasmVNC :6901<br/>or Webtop :3000"]
+        sidecar["sidecar :7000"]
+        hook["viewdoc.sh"]
+        apps["chromium · vlc · xdg-open"]
+    end
+
+    browser -->|iframe src=/slot/i/| proxy
+    browser -->|"{url:…}"| api
+    proxy -->|HTTP + WS| novnc
+    api -->|POST /params| sidecar
+    sidecar -->|fork| hook
+    hook -->|dispatch by ext| apps
 ```
 
 ## Quickstart
@@ -36,32 +53,64 @@ browser ── http://localhost:8080/?url=… ──► control-center (Go)
 docker compose build
 docker compose up -d
 
-open http://localhost:8080/                                   # iframe + URL bar + slot tabs
-open "http://localhost:8080/?url=https://example.com/x.pdf"   # auto-opens in slot 0
-curl -s http://localhost:8080/healthz                         # {"ready":4,"total":4}
+open https://localhost:8443/                                   # iframe + URL bar + slot tabs
+open "https://localhost:8443/?url=https://example.com/x.pdf"   # auto-opens in slot 0
+curl -sk https://localhost:8443/healthz                        # {"ready":4,"total":4}
 ```
 
 Default pool (`VIEWER_SLOTS`): 2× Kasm + 2× Webtop.
 
-## Endpoints
+## File Types
+
+The dispatcher routes by extension:
+
+| Group        | Extensions                                            | Opens with                    |
+|--------------|-------------------------------------------------------|-------------------------------|
+| Media        | `mp4`, `mkv`, `webm`, `mov`, `avi`, `mp3`, `wav`, `flac`, `ogg`, `m4a` | VLC |
+| Web / docs   | `pdf`, `html`, `htm`                                  | Chromium (new window)         |
+| Images       | `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`     | Chromium (new window)         |
+| Office       | `doc`, `docx`, `odt`, `rtf`, `xls`, `xlsx`, `ods`, `csv`, `ppt`, `pptx`, `odp` | LibreOffice |
+| Other        | anything else                                         | `xdg-open` (desktop default)  |
+
+## Services
+
+The system exposes two HTTP services. The **control-center** is the public entrypoint; the **sidecar** runs inside every viewer image on the compose network.
+
+### Control Center — `:8080` (plain), `:8443` (TLS)
+
+#### Endpoints
 
 | Method | Path                         | Purpose                              |
 |--------|------------------------------|--------------------------------------|
 | GET    | `/`                          | UI: iframe + URL bar + slot tabs     |
-| GET    | `/healthz`                   | `{ready, total}`                     |
-| GET    | `/api/slots`                 | slot table with reachability         |
-| POST   | `/api/slot/{i}/params`       | forward `{params:{url,…}}` to slot   |
-| ANY    | `/slot/{i}/*`                | reverse-proxy → `<slot[i]>:port`     |
+| GET    | `/healthz`                   | `{ready, total}` reachability summary |
+| GET    | `/api/slots`                 | slot table with per-slot reachability |
+| POST   | `/api/slot/{i}/params`       | forwards `{params:{url,…}}` to slot `i` |
+| ANY    | `/slot/{i}/*`                | reverse-proxy → `<slot[i]>:port` (HTTP + WS) |
+| GET    | `/static/*`                  | embedded UI assets                    |
 
-## Environment
+#### Environment
 
-| Var             | Default                                      | Purpose                                                  |
-|-----------------|----------------------------------------------|----------------------------------------------------------|
-| `LISTEN_ADDR`   | `:8080`                                      | control-center bind                                       |
-| `VIEWER_SLOTS`  | `viewer-1,viewer-2,viewer-3`                 | comma-separated `host[:port]`; port defaults to `6901`   |
+| Var             | Default                                                                                | Purpose                                  |
+|-----------------|----------------------------------------------------------------------------------------|------------------------------------------|
+| `LISTEN_ADDR`   | `:8080`                                                                                | Plain-HTTP bind address                  |
+| `TLS_ADDR`      | _(unset)_                                                                              | If set, also bind TLS (self-signed cert) |
+| `VIEWER_SLOTS`  | `viewer-1,viewer-2,viewer-3`                                                           | Comma-separated `[scheme://]host[:port]`.<br>**Kasm** — prefix `https://`, port `:6901`. KasmVNC serves self-signed HTTPS; the reverse-proxy skips cert verification.<br>**Webtop** — omit scheme (plain `http`), port `:3000`. The proxy patches kclient's `isSecureContext` check at response time so it loads under same-origin HTTP. |
 
-- **Kasm slots** — prefix `https://` and use `:6901` (KasmVNC serves self-signed HTTPS; the proxy skips cert verification).
-- **Webtop slots** — omit scheme, specify `:3000` (plain HTTP).
+### Sidecar — `:7000` (inside each viewer)
+
+#### Endpoints
+
+| Method | Path        | Purpose                                                  |
+|--------|-------------|----------------------------------------------------------|
+| GET    | `/healthz`  | `{"ok": true}`                                           |
+| POST   | `/params`   | validate + atomically write `/tmp/viewdoc.{json,env}`, fork `viewdoc.sh` |
+
+#### Environment
+
+| Var             | Default     | Purpose                          |
+|-----------------|-------------|----------------------------------|
+| `LISTEN_ADDR`   | `:7000`     | Sidecar bind address (fixed by compose convention) |
 
 -----
 
