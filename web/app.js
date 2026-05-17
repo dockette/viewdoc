@@ -15,8 +15,18 @@
   });
 
   const params = new URLSearchParams(location.search);
-  let activeSlot = parseInt(params.get('slot') || '0', 10);
+  const rawSlot = (params.get('slot') || '0').toLowerCase();
+  // `?slot=auto` defers to a random ready slot once /api/slots returns.
+  let activeSlot = rawSlot === 'auto' ? -1 : parseInt(rawSlot, 10);
+  if (Number.isNaN(activeSlot)) activeSlot = 0;
   let slots = [];
+
+  function pickRandomReadySlot() {
+    const ready = slots.filter((s) => s.ready);
+    const pool = ready.length ? ready : slots;
+    if (!pool.length) return 0;
+    return pool[Math.floor(Math.random() * pool.length)].idx;
+  }
 
   // Frames are kept alive across switches so KasmVNC keeps its single
   // primary client and the iframe never blinks/reconnects.
@@ -148,6 +158,9 @@
   const initialURL = params.get('url');
   if (initialURL) input.value = initialURL;
 
-  loadSlots().then(() => selectSlot(activeSlot));
+  loadSlots().then(() => {
+    if (activeSlot < 0) activeSlot = pickRandomReadySlot();
+    selectSlot(activeSlot);
+  });
   setInterval(loadSlots, 5000);
 })();
