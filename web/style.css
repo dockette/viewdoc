@@ -163,11 +163,18 @@ main#viewer {
   overflow: hidden;
 }
 
+/* Cap the iframe at 1920x1080 and center it. Both backends auto-resize
+   the remote desktop to the iframe (KasmVNC via ?resize=remote, Selkies
+   in its default auto-resize mode), so the cap bounds the requested
+   framebuffer — a 4K host window letterboxes around a 1920x1080 desktop
+   instead of asking the viewer container to render 8.3 megapixels. */
 main#viewer iframe {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(100%, 1920px);
+  height: min(100%, 1080px);
   border: 0;
   background: #000;
   visibility: hidden;

@@ -20,11 +20,13 @@ COPY --from=sidecar /out/sidecar /usr/local/bin/viewdoc-sidecar
 COPY .docker/viewdoc.sh /usr/local/bin/viewdoc.sh
 RUN chmod 0755 /usr/local/bin/viewdoc-sidecar /usr/local/bin/viewdoc.sh
 
-# Selkies defaults to 96 DPI + auto-resize-to-iframe, which renders xfce
-# uncomfortably small. Lock the desktop to 1920x1080 in manual-resolution
-# mode and bump DPI to 144 (≈1.5x, GTK-aware so it stays sharp). The LSIO
-# image hard-codes the selkies args in its s6 run script, so patch it.
-RUN sed -i 's|--mode="websockets"|--mode="websockets" --scaling-dpi="144" --is-manual-resolution-mode="true" --manual-width="1920" --manual-height="1080"|' \
+# Selkies defaults to 96 DPI + auto-resize-to-iframe; bump DPI to 144
+# (≈1.5x, GTK-aware so it stays sharp) but keep the auto-resize so the
+# desktop tracks the iframe size. The outer page CSS-caps the iframe at
+# 1920x1080 (see web/style.css), which is what keeps the framebuffer
+# from ballooning to 4K on big monitors. The LSIO image hard-codes the
+# selkies args in its s6 run script, so patch it.
+RUN sed -i 's|--mode="websockets"|--mode="websockets" --scaling-dpi="144"|' \
         /etc/s6-overlay/s6-rc.d/svc-selkies/run
 
 RUN set -eux; \

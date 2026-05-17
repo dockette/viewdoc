@@ -55,6 +55,9 @@
     // iframe — without it, the suspended AudioContext inside KasmVNC /
     // Selkies never resumes and audio stays silent. resize=remote asks the
     // client to call SetDesktopSize so the inner canvas matches the iframe.
+    // The iframe itself is CSS-capped at 1920x1080 (see style.css) so the
+    // resize follows the host window but never exceeds that — saves both
+    // backends from rendering 4K framebuffers on big monitors.
     f.src = `${slot.path}?resize=remote`;
     f.allow = 'autoplay; clipboard-read; clipboard-write; fullscreen';
     f.addEventListener('load', () => {
