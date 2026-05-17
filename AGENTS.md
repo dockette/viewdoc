@@ -7,10 +7,10 @@ Remote streaming sandbox for **viewing files** (PDF, office docs, video, audio, 
 ## Features
 
 1. **Go stdlib.** Single static binary built on `net/http` + `httputil.ReverseProxy`.
-2. **N slots, default 3.** Configured via `VIEWER_SLOTS` (comma-separated `host[:port]`, e.g. `viewer-kasm-1,viewer-webtop-1:3000,...`). Default port `6901` matches Kasm; LinuxServer Webtop needs explicit `:3000`. Sidecar port is fixed at `7000` across all images. Mixed pools are first-class.
+2. **N slots, default 3.** Configured via `VIEWER_SLOTS` — comma-separated entries of the form `<vnc>[|<sidecar>]`. The vnc half accepts `http(s)://host[:port]`, plus two pseudo-schemes — `kasm://host[:port]` expands to `https://host:<VIEWER_KASM_DEFAULT_PORT>` (default `6901`), and `webtop://host[:port]` expands to `http://host:<VIEWER_WEBTOP_DEFAULT_PORT>` (default `3000`). The sidecar half accepts `http(s)://host[:port]`; when omitted, the sidecar inherits the vnc host on `VIEWER_SIDECAR_DEFAULT_PORT` (default `7000`). Mixed pools are first-class. See **README.md → Configuration** for worked examples.
 3. **Plain HTTP.** Cleartext end-to-end across the compose network.
 4. **Static slot topology.** Slots declared in `docker-compose.yml` and discovered by DNS hostname on the compose network.
-5. **HTTP sidecar for params.** Each viewer image runs a tiny sidecar on `:7000`; control-center pushes params via `POST http://viewer-i:7000/params`.
+5. **HTTP sidecar for params.** Each viewer image runs a tiny sidecar on `:7000` by default (override per-slot in `VIEWER_SLOTS` or globally via `VIEWER_SIDECAR_DEFAULT_PORT`); control-center pushes params via `POST http://<sidecar-host>:<sidecar-port>/params`.
 6. **Stateless slot selection.** Slot picked by URL index or round-robin.
 
 ## Architecture

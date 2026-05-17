@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -29,13 +30,18 @@ func main() {
 	addr := envOr("LISTEN_ADDR", defaultListenAddr)
 	tlsAddr := envOr("TLS_ADDR", "")
 
-	pool, err := slots.FromCSV(envOr("VIEWER_SLOTS", defaultSlots))
+	defaults := slots.Defaults{
+		KasmPort:    envPort("VIEWER_KASM_DEFAULT_PORT", slots.DefaultKasmPort),
+		WebtopPort:  envPort("VIEWER_WEBTOP_DEFAULT_PORT", slots.DefaultWebtopPort),
+		SidecarPort: envPort("VIEWER_SIDECAR_DEFAULT_PORT", slots.DefaultSidecarPort),
+	}
+	pool, err := slots.FromCSV(envOr("VIEWER_SLOTS", defaultSlots), defaults)
 	if err != nil {
 		log.Fatalf("VIEWER_SLOTS: %v", err)
 	}
 
 	for _, s := range pool.All() {
-		log.Printf("slot %d %s -> %s", s.Index, s.PathPrefix(), s.VNCURL())
+		log.Printf("slot %d %s -> vnc=%s sidecar=%s", s.Index, s.PathPrefix(), s.VNCURL(), s.SidecarURL())
 	}
 
 	var tlsCfg *tls.Config
@@ -124,6 +130,18 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+func envPort(k string, def int) int {
+	v, ok := os.LookupEnv(k)
+	if !ok || v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 || n > 65535 {
+		log.Fatalf("%s: invalid port %q", k, v)
+	}
+	return n
 }
 
 func logMiddleware(h http.Handler) http.Handler {
