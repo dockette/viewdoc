@@ -50,7 +50,7 @@ run() {
 }
 
 case "$ext" in
-  mp4|mkv|webm|mov|avi|mp3|wav|flac|ogg|m4a)
+  mp4|mkv|webm|mov|avi|mpeg|mpg|m4v|3gp|3g2|ts|mts|m2ts|vob|wmv|asf|divx|ogv|mp3|wav|flac|ogg|m4a|aac|opus|mka|wma|aiff|ape|mid)
     log "dispatch=vlc ext=$ext url=$url"
     # --no-qt-privacy-ask suppresses VLC's first-run "Privacy and Network
     # Access Policy" modal, which otherwise blocks playback until clicked.
@@ -62,6 +62,56 @@ case "$ext" in
     # --norestore kills the "recover document?" prompt after a previous
     # session, --nologo suppresses the splash.
     run soffice --view --norestore --nologo "$url"
+    ;;
+  zip|7z|rar|tar|gz|tgz|bz2|tbz2|xz|txz)
+    # Archive managers want a local file, not a URL — download first, then
+    # open. curl runs synchronously here because the sidecar already forked
+    # viewdoc.sh as a separate process, so blocking here doesn't delay the
+    # sidecar's HTTP response.
+    tmpfile="/tmp/viewdoc-archive.$ext"
+    log "dispatch=xarchiver ext=$ext url=$url -> $tmpfile"
+    if curl -fsSL --max-time 60 -o "$tmpfile" "$url"; then
+      run xarchiver "$tmpfile"
+    else
+      log "download failed url=$url"
+    fi
+    ;;
+  pcap|pcapng|cap)
+    tmpfile="/tmp/viewdoc-capture.$ext"
+    log "dispatch=wireshark ext=$ext url=$url -> $tmpfile"
+    if curl -fsSL --max-time 60 -o "$tmpfile" "$url"; then
+      run wireshark -r "$tmpfile"
+    else
+      log "download failed url=$url"
+    fi
+    ;;
+  eml)
+    # claws-mail opens .eml files in a message-view window. Without a
+    # pre-seeded account its first-run wizard insists on account setup
+    # before the viewer is reachable, so write a stub local-mbox account
+    # to an isolated config dir — enough for account_get_list() to be
+    # non-empty, which is the condition that suppresses the wizard.
+    tmpfile="/tmp/viewdoc-mail.eml"
+    cfgdir="/tmp/viewdoc-claws"
+    if [ ! -f "$cfgdir/accountrc" ]; then
+      mkdir -p "$cfgdir"
+      printf '<?xml version="1.0" encoding="UTF-8"?>\n<folderlist>\n</folderlist>\n' \
+        > "$cfgdir/folderlist.xml"
+      cat > "$cfgdir/accountrc" <<'CFG'
+[Account: 1]
+account_name=local
+name=Viewdoc
+address=viewdoc@example.invalid
+protocol=2
+recv_at_getall=0
+CFG
+    fi
+    log "dispatch=claws-mail ext=$ext url=$url -> $tmpfile"
+    if curl -fsSL --max-time 60 -o "$tmpfile" "$url"; then
+      run claws-mail --alternate-config-dir "$cfgdir" "$tmpfile"
+    else
+      log "download failed url=$url"
+    fi
     ;;
   *)
     # Chromium with --no-sandbox: Kasm's firefox 144 trips over a stale

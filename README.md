@@ -66,10 +66,13 @@ The dispatcher routes by extension:
 
 | Group        | Extensions                                            | Opens with                    |
 |--------------|-------------------------------------------------------|-------------------------------|
-| Media        | `mp4`, `mkv`, `webm`, `mov`, `avi`, `mp3`, `wav`, `flac`, `ogg`, `m4a` | VLC |
+| Media        | `mp4`, `mkv`, `webm`, `mov`, `avi`, `mpeg`, `mpg`, `m4v`, `3gp`, `3g2`, `ts`, `mts`, `m2ts`, `vob`, `wmv`, `asf`, `divx`, `ogv`, `mp3`, `wav`, `flac`, `ogg`, `m4a`, `aac`, `opus`, `mka`, `wma`, `aiff`, `ape`, `mid` | VLC |
 | Web / docs   | `pdf`, `html`, `htm`                                  | Chromium (new window)         |
 | Images       | `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`     | Chromium (new window)         |
 | Office       | `doc`, `docx`, `odt`, `rtf`, `xls`, `xlsx`, `ods`, `csv`, `ppt`, `pptx`, `odp` | LibreOffice |
+| Archives     | `zip`, `7z`, `rar`, `tar`, `gz`, `tgz`, `bz2`, `tbz2`, `xz`, `txz` | Xarchiver (downloaded locally first) |
+| Email        | `eml`                                                 | Claws Mail (downloaded locally first) |
+| Captures     | `pcap`, `pcapng`, `cap`                               | Wireshark (downloaded locally first) |
 | Other        | anything else                                         | `xdg-open` (desktop default)  |
 
 ## Services

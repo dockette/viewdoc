@@ -9,8 +9,12 @@ RUN go build -trimpath -ldflags="-s -w" -o /out/sidecar ./cmd/sidecar
 FROM kasmweb/ubuntu-noble-desktop:1.18.0
 USER root
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends vlc xdg-utils libreoffice \
+# wireshark-common preseed: we only ever read pcap files, never capture, so
+# answer "no" to the setuid-helper question and skip the interactive prompt.
+RUN echo "wireshark-common wireshark-common/install-setuid boolean false" | debconf-set-selections \
+ && DEBIAN_FRONTEND=noninteractive apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      vlc xdg-utils libreoffice xarchiver unzip p7zip-full curl wireshark claws-mail \
  && rm -rf /var/lib/apt/lists/*
 
 # KasmVNC validates pem paths at boot even when require_ssl is false; the

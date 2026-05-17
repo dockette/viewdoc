@@ -8,8 +8,12 @@ RUN go build -trimpath -ldflags="-s -w" -o /out/sidecar ./cmd/sidecar
 
 FROM lscr.io/linuxserver/webtop:ubuntu-xfce
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends vlc xdg-utils ca-certificates libreoffice \
+# wireshark-common preseed: we only ever read pcap files, never capture, so
+# answer "no" to the setuid-helper question and skip the interactive prompt.
+RUN echo "wireshark-common wireshark-common/install-setuid boolean false" | debconf-set-selections \
+ && DEBIAN_FRONTEND=noninteractive apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      vlc xdg-utils ca-certificates libreoffice xarchiver unzip p7zip-full curl wireshark claws-mail \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=sidecar /out/sidecar /usr/local/bin/viewdoc-sidecar

@@ -80,14 +80,19 @@ Avoid `file-examples.com` URLs: that site gates downloads behind a 3-second JS r
 
 ### How to verify each branch works
 
+(Extension → application mapping lives in README.md's *File Types* table — don't duplicate it here.)
+
 Drive the host page with agent-browser (`fill #url-input` + `click #url-form button[type=submit]`), then `screenshot` and check:
 
-| Branch (ext)      | Dispatched to        | Pass criterion in the screenshot                                              |
-|-------------------|----------------------|-------------------------------------------------------------------------------|
-| `png` / `jpg`     | chromium `--new-window` (Kasm) or xdg-open → firefox (Webtop) | Image visible, tab title matches filename, URL bar shows the `/storage/<hash>/…` URL after the interstitial |
-| `pdf`             | same as above        | Chromium's built-in PDF viewer (sidebar with page thumbnails); URL ends in `.pdf` |
-| `docx` / office   | same as above        | **Currently no in-browser viewer** — chromium downloads the file (no LibreOffice in either image). To make this work, add `libreoffice` to `.docker/{kasm,webtop}/Dockerfile` and route office extensions to it in `viewdoc.sh`. |
-| `mp3`/`mp4`/`mkv`/`webm`/`mov`/`avi`/`wav`/`flac`/`ogg`/`m4a` | `vlc --no-video-title-show` | VLC window visible playing the media |
+| Branch     | Pass criterion in the screenshot, plus dev notes                                                                                                                                                              |
+|------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Image      | Image visible, tab title matches filename, URL bar shows the `/storage/<hash>/…` URL after any interstitial.                                                                                                  |
+| PDF        | Chromium's built-in PDF viewer (sidebar with page thumbnails); URL ends in `.pdf`.                                                                                                                            |
+| Office     | LibreOffice window visible with the document loaded read-only (`soffice --view --norestore --nologo`).                                                                                                        |
+| Media      | VLC window visible playing the media (`vlc --no-qt-privacy-ask --no-video-title-show`).                                                                                                                       |
+| Archive    | Xarchiver window listing the archive contents. Download is synchronous inside the forked hook, capped at 60s — viewdoc.sh blocks on `curl` before launching the GUI.                                          |
+| Capture    | Wireshark window open with the capture loaded (`wireshark -r <file>`); packet list visible.                                                                                                                   |
+| Email      | Claws Mail message-view window showing headers + body + attachment list. viewdoc.sh pre-seeds a stub local-mbox account in `/tmp/viewdoc-claws/` and runs `claws-mail --alternate-config-dir` to suppress the first-run wizard. |
 
 When a file load looks broken, check in order:
 1. `curl -sk <host>/api/slot/<i>/params -d '{"params":{"url":"…"}}'` returns `{"ok":true}` — proves the sidecar wrote `/tmp/viewdoc.{json,env}` and forked the hook.
