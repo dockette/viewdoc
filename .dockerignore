@@ -1,0 +1,8 @@
+.git
+.github
+.docs
+.DS_Store
+*.md
+LICENSE
+Makefile
+docker-compose*.yml
