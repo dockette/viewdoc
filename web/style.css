@@ -155,6 +155,9 @@ header {
   letter-spacing: 0.3px;
 }
 #url-form button:hover { filter: brightness(1.1); }
+#url-form button.danger {
+  background: var(--led-down);
+}
 
 main#viewer {
   flex: 1;

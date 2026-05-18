@@ -3,6 +3,7 @@
   const viewer = document.getElementById('viewer');
   const form = document.getElementById('url-form');
   const input = document.getElementById('url-input');
+  const resetBtn = document.getElementById('url-reset');
 
   // Surface iframe console messages on the outer page so a single DevTools
   // console shows everything across slots. The shim in proxy.go posts these.
@@ -156,6 +157,14 @@
     u.searchParams.set('url', url);
     history.replaceState(null, '', u);
     pushParams({ url });
+  });
+
+  resetBtn.addEventListener('click', () => {
+    input.value = '';
+    const u = new URL(location.href);
+    u.searchParams.delete('url');
+    history.replaceState(null, '', u);
+    input.focus();
   });
 
   const initialURL = params.get('url');
