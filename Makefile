@@ -1,12 +1,15 @@
 IMAGE  ?= dockette/viewdoc
 
-.PHONY: build up down logs ps test push cert
+.PHONY: build test run up down logs ps push cert
 
 cert:
 	go run ./cmd/gen-cert
 
 build:
 	docker compose build
+
+run:
+	docker compose up
 
 up:
 	docker compose up -d
