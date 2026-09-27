@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS sidecar
+FROM golang:1.27-alpine AS sidecar
 WORKDIR /src
 COPY go.mod ./
 COPY internal ./internal
