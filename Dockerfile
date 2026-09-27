@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY go.mod ./
 COPY assets.go ./
@@ -9,7 +9,7 @@ COPY cmd/control-center ./cmd/control-center
 ENV CGO_ENABLED=0 GOOS=linux
 RUN go build -trimpath -ldflags="-s -w" -o /out/control-center ./cmd/control-center
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=build /out/control-center /control-center
 EXPOSE 8080
 ENTRYPOINT ["/control-center"]

@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS sidecar
+FROM golang:1.27-alpine AS sidecar
 WORKDIR /src
 COPY go.mod ./
 COPY internal ./internal
@@ -6,7 +6,7 @@ COPY cmd/sidecar ./cmd/sidecar
 ENV CGO_ENABLED=0 GOOS=linux
 RUN go build -trimpath -ldflags="-s -w" -o /out/sidecar ./cmd/sidecar
 
-FROM kasmweb/ubuntu-noble-desktop:1.18.0
+FROM kasmweb/ubuntu-noble-desktop:1.19.0
 USER root
 
 # wireshark-common preseed: we only ever read pcap files, never capture, so
