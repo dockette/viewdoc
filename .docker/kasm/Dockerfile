@@ -1,13 +1,19 @@
-FROM golang:1.27-alpine AS sidecar
+# Cross-compile on the build host's arch so multi-arch builds don't run the
+# Go toolchain under QEMU.
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS sidecar
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod ./
 COPY internal ./internal
 COPY cmd/sidecar ./cmd/sidecar
-ENV CGO_ENABLED=0 GOOS=linux
-RUN go build -trimpath -ldflags="-s -w" -o /out/sidecar ./cmd/sidecar
+ENV CGO_ENABLED=0
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/sidecar ./cmd/sidecar
 
-FROM kasmweb/ubuntu-noble-desktop:1.19.0
+# Base pinned by digest for reproducible builds; Dependabot bumps it
+# (.github/dependabot.yml).
+FROM kasmweb/ubuntu-noble-desktop:1.19.0@sha256:14594dcf30c33768485a7dc6cb7bf3b7bef25121743d30371cbc56b525d96c71
 USER root
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # wireshark-common preseed: we only ever read pcap files, never capture, so
 # answer "no" to the setuid-helper question and skip the interactive prompt.
