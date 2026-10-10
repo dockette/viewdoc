@@ -47,6 +47,12 @@ RUN set -eux; \
     printf '#!/usr/bin/with-contenv bash\nexec s6-setuidgid abc /usr/local/bin/viewdoc-sidecar\n' \
       > /etc/s6-overlay/s6-rc.d/viewdoc-sidecar/run; \
     chmod 0755 /etc/s6-overlay/s6-rc.d/viewdoc-sidecar/run; \
+    # finish runs as root (unlike the abc-owned sidecar), so it can halt the
+    # whole container when the sidecar exits with 42 (POST /restart) — Nomad
+    # / compose then restarts it. Any other exit lets s6 respawn the sidecar.
+    printf '#!/bin/sh\nif [ "$1" = 42 ]; then\n  echo 42 > /run/s6-linux-init-container-results/exitcode\n  exec /run/s6/basedir/bin/halt\nfi\n' \
+      > /etc/s6-overlay/s6-rc.d/viewdoc-sidecar/finish; \
+    chmod 0755 /etc/s6-overlay/s6-rc.d/viewdoc-sidecar/finish; \
     # Depend on svc-pulseaudio so the sidecar starts only after the abc-user's
     # pulse daemon is up — VLC's first dispatch would otherwise race the
     # /defaults/native socket coming online.

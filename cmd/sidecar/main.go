@@ -26,16 +26,30 @@ const (
 	envName   = "viewdoc.env"
 	envPrefix = "VIEWDOC_Q_"
 	hookPath  = "/usr/local/bin/viewdoc.sh"
+	lastPath  = "/tmp/.viewdoc_last_url"
+
+	// restartExitCode is the sentinel the viewer image's supervisor wrapper
+	// (Kasm custom_startup.sh / Webtop s6 finish) turns into a container
+	// exit. Any other exit just restarts the sidecar in place.
+	restartExitCode = 42
 )
 
 func main() {
 	addr := envOr("LISTEN_ADDR", ":7000")
+
+	// viewdoc.sh skips a URL equal to the last one it opened. Compose's
+	// restart policy reuses the container (and its /tmp), so a fresh
+	// desktop would otherwise refuse to reopen the pre-restart URL.
+	if err := os.Remove(lastPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		log.Printf("clear %s: %v", lastPath, err)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "ok\n")
 	})
 	mux.HandleFunc("POST /params", handleParams)
+	mux.HandleFunc("POST /restart", handleRestart)
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -75,6 +89,22 @@ func handleParams(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "keys": len(clean)})
+}
+
+// handleRestart replies first, then exits with restartExitCode so the
+// control-center sees 202 instead of a dropped connection.
+func handleRestart(w http.ResponseWriter, _ *http.Request) {
+	log.Printf("restart requested, exiting with code %d", restartExitCode)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		os.Exit(restartExitCode)
+	}()
 }
 
 func writeQuery(m map[string]string) error {

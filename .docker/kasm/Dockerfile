@@ -38,8 +38,11 @@ RUN chmod 0755 /usr/local/bin/viewdoc-sidecar /usr/local/bin/viewdoc.sh
 # lets firefox lazily populate the existing `kasm` profile dir on first run.
 #
 # Kasm's vnc_startup.sh monitors custom_startup.sh's PID and prints
-# "Unknown Service: custom_startup" if it exits — so the script must stay
-# alive. Exec the sidecar so it becomes the tracked long-running process.
+# "Unknown Service: custom_startup" if it exits (it never restarts it) — so
+# the script must stay alive. It supervises the sidecar itself: exit code 42
+# (POST /restart) SIGTERMs PID 1 — vnc_startup.sh, same uid, traps SIGTERM
+# and exits — so the container dies and Nomad / compose restarts it. Any
+# other exit just respawns the sidecar.
 RUN cat > /dockerstartup/custom_startup.sh <<'EOF' \
  && chmod 0755 /dockerstartup/custom_startup.sh
 #!/usr/bin/env bash
@@ -57,7 +60,11 @@ StartWithLastProfile=1
 Version=2
 INI
 fi
-exec /usr/local/bin/viewdoc-sidecar
+while :; do
+  /usr/local/bin/viewdoc-sidecar
+  [ $? -eq 42 ] && exec kill -TERM 1
+  sleep 1
+done
 EOF
 
 USER 1000
