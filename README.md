@@ -97,6 +97,7 @@ The system exposes two HTTP services. The **control-center** is the public entry
 | GET    | `/healthz`                   | `{ready, total}` reachability summary |
 | GET    | `/api/slots`                 | slot table with per-slot reachability |
 | POST   | `/api/slot/{i}/params`       | forwards `{params:{url,…}}` to slot `i` |
+| POST   | `/api/slot/{i}/restart`      | restarts slot `i`'s container (requires `Content-Type: application/json`) |
 | ANY    | `/slot/{i}/*`                | reverse-proxy → `<slot[i]>:port` (HTTP + WS) |
 | GET    | `/*`                         | embedded UI assets (`/app.js`, `/style.css`) |
 
@@ -168,12 +169,31 @@ VIEWER_SLOTS="kasm://node-1,webtop://node-2"
 |--------|-------------|----------------------------------------------------------|
 | GET    | `/healthz`  | plain-text `ok`                                          |
 | POST   | `/params`   | validate + atomically write `/tmp/viewdoc.{json,env}`, fork `viewdoc.sh` |
+| POST   | `/restart`  | reply 202, then exit with code 42 — the image turns that into a container exit |
 
 #### Environment
 
 | Var             | Default     | Purpose                          |
 |-----------------|-------------|----------------------------------|
 | `LISTEN_ADDR`   | `:7000`     | Sidecar bind address (fixed by compose convention) |
+
+#### Restarting a slot
+
+The **Restart** button (`POST /api/slot/{i}/restart`) makes the viewer container exit; whatever supervises it brings up a fresh one. The sidecar can't kill the container itself (on Webtop it runs as `abc`, PID 1 is root), so it exits with code **42** and the image's wrapper does the rest:
+
+- **Kasm** — `custom_startup.sh` loops on the sidecar; on 42 it sends SIGTERM to PID 1 (`vnc_startup.sh`, same uid), which exits.
+- **Webtop** — the s6 `finish` script (runs as root) calls `/run/s6/basedir/bin/halt`; the container exits with code 42.
+
+Any other sidecar exit just respawns the sidecar. Restarting requires a restart policy: compose's `restart: unless-stopped` works as-is. On **Nomad**, the default `restart` stanza (`attempts = 2` per 30m, `mode = "fail"`) runs out after a few clicks, and the allocation gets rescheduled — possibly to another node with new dynamic ports, which breaks a static `VIEWER_SLOTS`. Allow many quick in-place restarts:
+
+```hcl
+restart {
+  attempts = 100
+  interval = "30m"
+  delay    = "2s"
+  mode     = "delay"
+}
+```
 
 ## Development
 

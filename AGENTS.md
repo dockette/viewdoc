@@ -51,6 +51,7 @@ Listens on `:8080` (`LISTEN_ADDR`), plus TLS on `TLS_ADDR` when set.
 | GET    | `/healthz`               | `{ready, total}` slot reachability summary; 503 when no slot is ready. |
 | GET    | `/api/slots`             | `{count, slots:[{idx, host, ip, path, ready}]}`. `ready` = VNC port accepts TCP (sidecar not probed). |
 | POST   | `/api/slot/{i}/params`   | Forwarded verbatim to `<slot[i]>:7000/params`. |
+| POST   | `/api/slot/{i}/restart`  | Forwarded to `<slot[i]>:7000/restart` (requires `Content-Type: application/json`). |
 | ANY    | `/slot/{i}/*`            | Reverse proxy → `<slot[i]>:<novnc>` (HTTP + WS upgrade). |
 | GET    | `/*`                     | Embedded UI assets from `web/` (`embed.FS`), e.g. `/app.js`, `/style.css`. |
 
@@ -62,6 +63,7 @@ Binds to `:7000` in every viewer image. No auth — compose network is the trust
 |--------|-------------|---------|
 | POST   | `/params`   | Validate, atomically write `/tmp/viewdoc.{json,env}`, fork `viewdoc.sh`. |
 | GET    | `/healthz`  | Liveness — plain-text `ok`. |
+| POST   | `/restart`  | Reply 202, exit 42. Kasm's `custom_startup.sh` / Webtop's s6 `finish` turn that into a container exit; the orchestrator restarts it (see README → *Restarting a slot*). |
 
 `POST /params` body: `{"params": {"<key>": "<value>", ...}}`. Sanitization: key `^[A-Za-z][A-Za-z0-9_]{0,63}$`, ≤32 keys, ≤4096 bytes/value.
 
