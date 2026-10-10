@@ -66,7 +66,7 @@ func (s Slot) SidecarAddr() string {
 	return fmt.Sprintf("%s:%d", s.SidecarHost, s.SidecarPort)
 }
 func (s Slot) SidecarURL() string {
-	return fmt.Sprintf("%s://%s:%d/params", s.SidecarScheme, s.SidecarHost, s.SidecarPort)
+	return fmt.Sprintf("%s://%s:%d", s.SidecarScheme, s.SidecarHost, s.SidecarPort)
 }
 
 // PathPrefix is the URL prefix the slot is mounted under on the control-center

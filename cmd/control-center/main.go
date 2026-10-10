@@ -62,6 +62,7 @@ func main() {
 	mux.HandleFunc("GET /healthz", h.Healthz)
 	mux.HandleFunc("GET /api/slots", h.Slots)
 	mux.HandleFunc("POST /api/slot/{idx}/params", h.Params)
+	mux.HandleFunc("POST /api/slot/{idx}/restart", h.Restart)
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})

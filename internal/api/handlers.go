@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"strconv"
@@ -121,11 +122,44 @@ func (h *Handlers) Params(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("params slot=%d host=%s %s", idx, slot.Host, paramsForLog(clean))
 	payload, _ := json.Marshal(map[string]any{"params": clean})
-	req, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, slot.SidecarURL(), bytes.NewReader(payload))
+	req, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, slot.SidecarURL()+"/params", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := h.Client.Do(req)
 	if err != nil {
 		log.Printf("params slot=%d sidecar unreachable: %v", idx, err)
+		http.Error(w, fmt.Sprintf("sidecar unreachable: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
+// Restart asks the slot's sidecar to exit with its restart code; the viewer
+// image turns that into a container exit and the orchestrator (Nomad, or
+// compose's restart policy) brings up a fresh one. Requiring a JSON
+// Content-Type forces a CORS preflight, so a cross-site form can't trigger it.
+func (h *Handlers) Restart(w http.ResponseWriter, r *http.Request) {
+	idx, err := strconv.Atoi(r.PathValue("idx"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	slot, ok := h.Pool.Get(idx)
+	if !ok {
+		http.Error(w, "slot not found", http.StatusNotFound)
+		return
+	}
+	if mt, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mt != "application/json" {
+		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+		return
+	}
+	log.Printf("restart slot=%d host=%s", idx, slot.Host)
+	req, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, slot.SidecarURL()+"/restart", nil)
+	resp, err := h.Client.Do(req)
+	if err != nil {
+		log.Printf("restart slot=%d sidecar unreachable: %v", idx, err)
 		http.Error(w, fmt.Sprintf("sidecar unreachable: %v", err), http.StatusBadGateway)
 		return
 	}
