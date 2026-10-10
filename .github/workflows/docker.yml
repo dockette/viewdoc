@@ -12,8 +12,46 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    name: "Lint & unit tests"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race ./...
+
+      - name: staticcheck
+        uses: dominikh/staticcheck-action@v1
+        with:
+          install-go: false
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: shellcheck
+        run: shellcheck .docker/viewdoc.sh
+
+      - name: hadolint
+        run: |
+          for f in Dockerfile .docker/kasm/Dockerfile .docker/webtop/Dockerfile; do
+            echo "::group::$f"
+            docker run --rm -i -v "$PWD/.hadolint.yaml:/.config/hadolint.yaml:ro" hadolint/hadolint < "$f"
+            echo "::endgroup::"
+          done
+
   test:
     name: "Test (${{ matrix.variant }})"
+    needs: lint
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -27,7 +65,7 @@ jobs:
             dockerfile: .docker/webtop/Dockerfile
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -58,7 +96,7 @@ jobs:
             dockerfile: .docker/webtop/Dockerfile
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Login to DockerHub
         uses: docker/login-action@v4
@@ -72,16 +110,29 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      # dockette/viewdoc:<variant> (rolling) + dockette/viewdoc:<variant>-<sha>
+      # (immutable, for rollbacks / pinning).
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: dockette/viewdoc
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ matrix.variant }}
+            type=sha,prefix=${{ matrix.variant }}-,format=short
+
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           push: ${{ github.ref == 'refs/heads/master' }}
-          tags: dockette/viewdoc:${{ matrix.variant }}
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,scope=${{ matrix.variant }}
 
   docs:
     name: "Docs"
@@ -90,7 +141,7 @@ jobs:
     if: github.ref == 'refs/heads/master'
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v5

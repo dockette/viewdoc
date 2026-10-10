@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Bumps the digest-pinned Kasm / Webtop bases and the golang builder.
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/.docker/kasm"
+      - "/.docker/webtop"
+    schedule:
+      interval: "weekly"
