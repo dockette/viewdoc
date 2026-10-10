@@ -154,6 +154,12 @@
       b.className = `tab tab-${getSlotState(s.idx).state}`;
       if (s.idx === activeSlot) b.classList.add('active');
       b.title = s.ip ? `${s.host} · ${s.ip}` : s.host;
+      // Say which half is down when the desktop is reachable but the sidecar
+      // (which opens files) isn't, or vice versa.
+      if (!s.ready) {
+        const down = [!s.vnc && 'desktop', !s.sidecar && 'sidecar'].filter(Boolean);
+        if (down.length) b.title += ` · ${down.join(' + ')} down`;
+      }
 
       const led = document.createElement('span');
       led.className = 'led';

@@ -20,26 +20,34 @@ import (
 type Handlers struct {
 	Pool   *slots.Pool
 	Client *http.Client
+	// Probe is used for the sidecar /healthz check; short timeout so one
+	// hung sidecar can't stall /api/slots, which the UI polls every 5s.
+	Probe *http.Client
 }
 
 func New(pool *slots.Pool) *Handlers {
 	return &Handlers{
 		Pool:   pool,
 		Client: &http.Client{Timeout: 3 * time.Second},
+		Probe:  &http.Client{Timeout: time.Second},
 	}
 }
 
 type slotEntry struct {
-	Index int    `json:"idx"`
-	Host  string `json:"host"`
-	IP    string `json:"ip,omitempty"`
-	Path  string `json:"path"`
-	Ready bool   `json:"ready"`
+	Index   int    `json:"idx"`
+	Host    string `json:"host"`
+	IP      string `json:"ip,omitempty"`
+	Path    string `json:"path"`
+	VNC     bool   `json:"vnc"`
+	Sidecar bool   `json:"sidecar"`
+	Ready   bool   `json:"ready"`
 }
 
 // readiness probes every slot in parallel. IP is best-effort (empty on
 // resolution failure); Path is the same-origin prefix the browser uses to
-// build the iframe URL.
+// build the iframe URL. A slot is Ready only when both the VNC port accepts
+// TCP and the sidecar answers /healthz — otherwise the desktop shows up but
+// opening a file fails with 502.
 func (h *Handlers) readiness() (ready int, entries []slotEntry) {
 	all := h.Pool.All()
 	entries = make([]slotEntry, len(all))
@@ -48,12 +56,15 @@ func (h *Handlers) readiness() (ready int, entries []slotEntry) {
 		wg.Add(1)
 		go func(i int, s slots.Slot) {
 			defer wg.Done()
+			vnc, sidecar := probe(s.VNCAddr()), h.probeSidecar(s)
 			entries[i] = slotEntry{
-				Index: s.Index,
-				Host:  s.Host,
-				IP:    resolveIP(s.Host),
-				Path:  s.PathPrefix() + "/",
-				Ready: probe(s.VNCAddr()),
+				Index:   s.Index,
+				Host:    s.Host,
+				IP:      resolveIP(s.Host),
+				Path:    s.PathPrefix() + "/",
+				VNC:     vnc,
+				Sidecar: sidecar,
+				Ready:   vnc && sidecar,
 			}
 		}(i, s)
 	}
@@ -197,6 +208,16 @@ func probe(addr string) bool {
 	}
 	_ = c.Close()
 	return true
+}
+
+func (h *Handlers) probeSidecar(s slots.Slot) bool {
+	resp, err := h.Probe.Get(s.SidecarURL() + "/healthz")
+	if err != nil {
+		return false
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
