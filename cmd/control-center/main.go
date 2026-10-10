@@ -22,7 +22,10 @@ import (
 )
 
 const (
-	defaultSlots      = "viewer-1,viewer-2,viewer-3"
+	// Matches the services in docker-compose.yml. Pseudo-schemes, not bare
+	// hosts: a bare host means plain http on the Kasm port, which KasmVNC
+	// (https-only on :6901) rejects.
+	defaultSlots      = "kasm://viewer-kasm-1,kasm://viewer-kasm-2,webtop://viewer-webtop-1,webtop://viewer-webtop-2"
 	defaultListenAddr = ":8080"
 )
 

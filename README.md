@@ -106,7 +106,7 @@ The system exposes two HTTP services. The **control-center** is the public entry
 |--------------------------------|-------------------------------|------------------------------------------------------------------------------------------------------|
 | `LISTEN_ADDR`                  | `:8080`                       | Plain-HTTP bind address                                                                              |
 | `TLS_ADDR`                     | _(unset)_                     | If set, also bind TLS (self-signed cert)                                                             |
-| `VIEWER_SLOTS`                 | `viewer-1,viewer-2,viewer-3`  | Comma-separated slot list. See **Slot configuration** below for the full grammar.                    |
+| `VIEWER_SLOTS`                 | `kasm://viewer-kasm-1,kasm://viewer-kasm-2,webtop://viewer-webtop-1,webtop://viewer-webtop-2` (the compose services) | Comma-separated slot list. See **Slot configuration** below for the full grammar.                    |
 | `VIEWER_KASM_DEFAULT_PORT`     | `6901`                        | VNC port used for bare entries and the `kasm://` pseudo-scheme.                                      |
 | `VIEWER_WEBTOP_DEFAULT_PORT`   | `3000`                        | VNC port used for the `webtop://` pseudo-scheme.                                                     |
 | `VIEWER_SIDECAR_DEFAULT_PORT`  | `7000`                        | Sidecar port used when the sidecar half of a slot entry is omitted (or specifies no port).           |
