@@ -49,6 +49,13 @@ is_open() {
   esac
 }
 
+# Every app below takes the URL as a bare argument, so a value like
+# "--version.mp4" would be parsed as an option. Only real URLs get through.
+case "$url" in
+  http://*|https://*) ;;
+  *) log "not an http(s) URL, refusing: $url"; exit 0 ;;
+esac
+
 if [ -r "$LAST" ] && [ "$(cat "$LAST")" = "$url" ] && is_open; then
   log "dedup hit, $url already open"
   exit 0
@@ -165,15 +172,13 @@ CFG
     # (webtop ships one wired to /config/.config/chromium, whose
     # SingletonLock embeds the previous container's hostname — recreating
     # the container leaves a stale lock that wedges every new launch).
-    if printf '%s' "$url" | grep -qE '^https?://'; then
-      for b in chromium chromium-browser google-chrome chrome; do
-        if command -v "$b" >/dev/null 2>&1; then
-          log "dispatch=$b ext=$ext url=$url"
-          run "$b" --no-sandbox --user-data-dir=/tmp/viewdoc-chromium --new-window "$url"
-          exit 0
-        fi
-      done
-    fi
+    for b in chromium chromium-browser google-chrome chrome; do
+      if command -v "$b" >/dev/null 2>&1; then
+        log "dispatch=$b ext=$ext url=$url"
+        run "$b" --no-sandbox --user-data-dir=/tmp/viewdoc-chromium --new-window "$url"
+        exit 0
+      fi
+    done
     log "dispatch=xdg-open ext=$ext url=$url"
     run xdg-open "$url"
     ;;
