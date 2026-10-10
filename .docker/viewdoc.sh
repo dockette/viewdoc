@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fired by the sidecar after writing /tmp/viewdoc.{json,env}.
-# Dedupes via $LAST so repeated POSTs from the iframe don't re-launch the app.
+# Dedupes via $LAST + $STATE so repeated POSTs from the iframe don't re-launch
+# an app that is still showing the same URL (see is_open).
 # All dispatch lines AND each launched app's stdout/stderr go to ONE place:
 # /tmp/viewdoc.log + the sidecar's stderr. So `docker logs <viewer>` and
 # `tail -f /tmp/viewdoc.log` show the exact same stream.
@@ -9,7 +10,11 @@ set -eu
 
 QUERY_ENV="/tmp/viewdoc.env"
 LAST="/tmp/.viewdoc_last_url"
+STATE="/tmp/.viewdoc_last_state"
 LOG="/tmp/viewdoc.log"
+# A launcher that exits 0 faster than this handed the URL to an already
+# running instance (chromium, soffice, xdg-open) rather than failing.
+HANDOFF_SECS=5
 
 log() {
   # Write to file + stderr separately (not via `tee`) so set -e doesn't bail
@@ -30,11 +35,40 @@ if [ -z "$url" ]; then
   exit 0
 fi
 
-if [ -r "$LAST" ] && [ "$(cat "$LAST")" = "$url" ]; then
+# $STATE is "<pid> <running|handoff|exited>" for the launch that wrote $LAST.
+# The URL counts as still open while that launch's process is alive, or when
+# it handed off to an existing instance (whose window we can't track). A
+# crashed or closed app ("exited") lets the same URL open again.
+is_open() {
+  local pid state
+  read -r pid state < "$STATE" 2>/dev/null || return 1
+  case "$state" in
+    handoff) return 0 ;;
+    running) kill -0 "$pid" 2>/dev/null ;;
+    *)       return 1 ;;
+  esac
+}
+
+if [ -r "$LAST" ] && [ "$(cat "$LAST")" = "$url" ] && is_open; then
   log "dedup hit, $url already open"
   exit 0
 fi
-printf '%s' "$url" > "$LAST"
+
+# Downloads get unique names (two overlapping requests can't clobber each
+# other) and are pruned after a day.
+find /tmp -maxdepth 1 -name 'viewdoc-dl.*' -mmin +1440 -delete 2>/dev/null || true
+download() {
+  local f
+  f="$(mktemp --suffix=".$ext" /tmp/viewdoc-dl.XXXXXXXX)"
+  log "download $url -> $f"
+  if curl -fsSL --max-time 60 -o "$f" "$url"; then
+    printf '%s' "$f"
+  else
+    log "download failed url=$url"
+    rm -f "$f"
+    return 1
+  fi
+}
 
 lower="$(printf '%s' "$url" | tr '[:upper:]' '[:lower:]')"
 path="${lower%%\?*}"; path="${path%%#*}"
@@ -46,7 +80,27 @@ run() {
   # log file and the sidecar's stderr — keeps the file as the durable
   # record AND surfaces output in `docker logs <viewer>` as it happens.
   # setsid detaches the app from this shell so the sidecar returns promptly.
-  ( setsid "$@" </dev/null 2>&1 | tee -a "$LOG" >&2 ) &
+  # When the app exits, the subshell records how — but only if no newer
+  # launch has taken over $STATE meanwhile.
+  (
+    start=$SECONDS
+    setsid "$@" </dev/null 2>&1 | tee -a "$LOG" >&2
+    rc=${PIPESTATUS[0]}
+    state=exited
+    if [ "$rc" -eq 0 ] && [ $((SECONDS - start)) -lt "$HANDOFF_SECS" ]; then
+      state=handoff
+    fi
+    owner=""
+    read -r owner _ < "$STATE" 2>/dev/null || true
+    if [ "$owner" = "$BASHPID" ]; then
+      printf '%s %s\n' "$BASHPID" "$state" > "$STATE"
+    fi
+    log "exit: $1 rc=$rc state=$state"
+  ) &
+  # Recorded only once something actually launched, so a failed download
+  # doesn't make the next identical request a no-op.
+  printf '%s %s\n' "$!" running > "$STATE"
+  printf '%s' "$url" > "$LAST"
 }
 
 case "$ext" in
@@ -68,21 +122,15 @@ case "$ext" in
     # open. curl runs synchronously here because the sidecar already forked
     # viewdoc.sh as a separate process, so blocking here doesn't delay the
     # sidecar's HTTP response.
-    tmpfile="/tmp/viewdoc-archive.$ext"
-    log "dispatch=xarchiver ext=$ext url=$url -> $tmpfile"
-    if curl -fsSL --max-time 60 -o "$tmpfile" "$url"; then
+    log "dispatch=xarchiver ext=$ext url=$url"
+    if tmpfile="$(download)"; then
       run xarchiver "$tmpfile"
-    else
-      log "download failed url=$url"
     fi
     ;;
   pcap|pcapng|cap)
-    tmpfile="/tmp/viewdoc-capture.$ext"
-    log "dispatch=wireshark ext=$ext url=$url -> $tmpfile"
-    if curl -fsSL --max-time 60 -o "$tmpfile" "$url"; then
+    log "dispatch=wireshark ext=$ext url=$url"
+    if tmpfile="$(download)"; then
       run wireshark -r "$tmpfile"
-    else
-      log "download failed url=$url"
     fi
     ;;
   eml)
@@ -91,7 +139,6 @@ case "$ext" in
     # before the viewer is reachable, so write a stub local-mbox account
     # to an isolated config dir — enough for account_get_list() to be
     # non-empty, which is the condition that suppresses the wizard.
-    tmpfile="/tmp/viewdoc-mail.eml"
     cfgdir="/tmp/viewdoc-claws"
     if [ ! -f "$cfgdir/accountrc" ]; then
       mkdir -p "$cfgdir"
@@ -106,11 +153,9 @@ protocol=2
 recv_at_getall=0
 CFG
     fi
-    log "dispatch=claws-mail ext=$ext url=$url -> $tmpfile"
-    if curl -fsSL --max-time 60 -o "$tmpfile" "$url"; then
+    log "dispatch=claws-mail ext=$ext url=$url"
+    if tmpfile="$(download)"; then
       run claws-mail --alternate-config-dir "$cfgdir" "$tmpfile"
-    else
-      log "download failed url=$url"
     fi
     ;;
   *)

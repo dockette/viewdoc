@@ -96,7 +96,7 @@ Drive the host page with agent-browser (`fill #url-input` + `click #url-form but
 
 When a file load looks broken, check in order:
 1. `curl -sk <host>/api/slot/<i>/params -d '{"params":{"url":"…"}}'` returns `{"ok":true}` — proves the sidecar wrote `/tmp/viewdoc.{json,env}` and forked the hook.
-2. The browser/VLC window is *open* in the desktop — `viewdoc.sh` de-dupes via `/tmp/.viewdoc_last_url`, so resubmitting the same URL is a no-op.
+2. The browser/VLC window is *open* in the desktop — `viewdoc.sh` skips a URL equal to the last one (`/tmp/.viewdoc_last_url`) while that launch is still open: its process is alive, or it handed off to an already-running instance (exit 0 within 5s, e.g. a second Chromium/LibreOffice window). `/tmp/.viewdoc_last_state` holds `<pid> <running|handoff|exited>`. A failed download, a crash, or closing a VLC/Xarchiver/Wireshark window lets the same URL open again; a closed handed-off window can't be detected, so resubmitting that URL stays a no-op. Downloads land in unique `/tmp/viewdoc-dl.*` files, pruned after a day.
 3. The slot's iframe is actually connected (KasmVNC shows "Connection Terminated: a new primary client connected" at the bottom when a fresh client takes over — that banner is normal, not an error).
 
 ### Known issue: KasmVNC primary-client lock
