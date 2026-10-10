@@ -7,11 +7,11 @@ Remote streaming sandbox for **viewing files** (PDF, office docs, video, audio, 
 ## Features
 
 1. **Go stdlib.** Single static binary built on `net/http` + `httputil.ReverseProxy`.
-2. **N slots, default 3.** Configured via `VIEWER_SLOTS` — comma-separated entries of the form `<vnc>[|<sidecar>]`. The vnc half accepts `http(s)://host[:port]`, plus two pseudo-schemes — `kasm://host[:port]` expands to `https://host:<VIEWER_KASM_DEFAULT_PORT>` (default `6901`), and `webtop://host[:port]` expands to `http://host:<VIEWER_WEBTOP_DEFAULT_PORT>` (default `3000`). The sidecar half accepts `http(s)://host[:port]`; when omitted, the sidecar inherits the vnc host on `VIEWER_SIDECAR_DEFAULT_PORT` (default `7000`). Mixed pools are first-class. See **README.md → Configuration** for worked examples.
-3. **Plain HTTP.** Cleartext end-to-end across the compose network.
+2. **N slots, default 3.** Configured via `VIEWER_SLOTS` — comma-separated entries of the form `<vnc>[|<sidecar>]`. The vnc half accepts `http(s)://host[:port]`, plus two pseudo-schemes — `kasm://host[:port]` expands to `https://host:<VIEWER_KASM_DEFAULT_PORT>` (default `6901`), and `webtop://host[:port]` expands to `http://host:<VIEWER_WEBTOP_DEFAULT_PORT>` (default `3000`). The sidecar half accepts `http(s)://host[:port]`; when omitted, the sidecar inherits the vnc host on `VIEWER_SIDECAR_DEFAULT_PORT` (default `7000`). Mixed pools are first-class. See **README.md → Slot configuration** for worked examples.
+3. **Plain HTTP inside, optional TLS outside.** Cleartext across the compose network (Kasm's own self-signed `:6901` is proxied with skip-verify). The control-center additionally serves TLS on `TLS_ADDR` (compose: `:8443`) with the self-signed cert embedded from `certs/server.{crt,key}` (regenerate via `make cert`) — browsers need a secure context for clipboard access.
 4. **Static slot topology.** Slots declared in `docker-compose.yml` and discovered by DNS hostname on the compose network.
 5. **HTTP sidecar for params.** Each viewer image runs a tiny sidecar on `:7000` by default (override per-slot in `VIEWER_SLOTS` or globally via `VIEWER_SIDECAR_DEFAULT_PORT`); control-center pushes params via `POST http://<sidecar-host>:<sidecar-port>/params`.
-6. **Stateless slot selection.** Slot picked by URL index or round-robin.
+6. **Stateless slot selection.** Slot picked by `?slot=<i>` (default `0`) or `?slot=auto` (random ready slot).
 
 ## Architecture
 
@@ -29,7 +29,7 @@ flowchart LR
         sidecar["sidecar :7000"]
         files[("/tmp/viewdoc.{json,env}")]
         hook["viewdoc.sh"]
-        apps["firefox / libreoffice / vlc"]
+        apps["chromium / libreoffice / vlc /<br/>xarchiver / wireshark / claws-mail"]
     end
 
     browser -- "iframe src=/slot/0/" --> proxy
@@ -43,16 +43,16 @@ flowchart LR
 
 ## Control Center (API)
 
-Listens on `:8080`.
+Listens on `:8080` (`LISTEN_ADDR`), plus TLS on `TLS_ADDR` when set.
 
 | Method | Path                     | Purpose |
 |--------|--------------------------|---------|
 | GET    | `/`                      | Landing page with `<iframe>` viewer + JS bridge. |
-| GET    | `/healthz`               | Liveness + per-slot reachability map. |
-| GET    | `/api/slots`             | `{count, slots:[{idx, host, ready}]}`. |
+| GET    | `/healthz`               | `{ready, total}` slot reachability summary; 503 when no slot is ready. |
+| GET    | `/api/slots`             | `{count, slots:[{idx, host, ip, path, ready}]}`. `ready` = VNC port accepts TCP (sidecar not probed). |
 | POST   | `/api/slot/{i}/params`   | Forwarded verbatim to `<slot[i]>:7000/params`. |
 | ANY    | `/slot/{i}/*`            | Reverse proxy → `<slot[i]>:<novnc>` (HTTP + WS upgrade). |
-| GET    | `/static/*`              | Embedded assets (`embed.FS`). |
+| GET    | `/*`                     | Embedded UI assets from `web/` (`embed.FS`), e.g. `/app.js`, `/style.css`. |
 
 ## Sidecar (API)
 
@@ -61,7 +61,7 @@ Binds to `:7000` in every viewer image. No auth — compose network is the trust
 | Method | Path        | Purpose |
 |--------|-------------|---------|
 | POST   | `/params`   | Validate, atomically write `/tmp/viewdoc.{json,env}`, fork `viewdoc.sh`. |
-| GET    | `/healthz`  | Liveness — `{"ok": true}`. |
+| GET    | `/healthz`  | Liveness — plain-text `ok`. |
 
 `POST /params` body: `{"params": {"<key>": "<value>", ...}}`. Sanitization: key `^[A-Za-z][A-Za-z0-9_]{0,63}$`, ≤32 keys, ≤4096 bytes/value.
 
@@ -130,7 +130,7 @@ Useful flags: `--headed` to watch a run, `--session <name>` to isolate parallel 
 
 ## What NOT to do
 
-- ❌ No TLS, certs, openssl.
+- ❌ No TLS between containers, no ACME / real certs, no openssl — the only TLS is the control-center's optional self-signed listener.
 - ❌ No `/var/run/docker.sock`, no `docker exec`, no docker-cli inside any container.
 - ❌ No dynamic slot spawning at runtime.
 - ❌ No pool leasing / session IDs / TTL logic.

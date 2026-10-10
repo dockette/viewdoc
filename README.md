@@ -44,7 +44,7 @@ flowchart LR
         novnc["KasmVNC :6901<br/>or Webtop :3000"]
         sidecar["sidecar :7000"]
         hook["viewdoc.sh"]
-        apps["chromium · vlc · xdg-open"]
+        apps["chromium · libreoffice · vlc<br/>xarchiver · wireshark · claws-mail"]
     end
 
     browser -->|iframe src=/slot/i/| proxy
@@ -81,7 +81,7 @@ The dispatcher routes by extension:
 | Archives     | `zip`, `7z`, `rar`, `tar`, `gz`, `tgz`, `bz2`, `tbz2`, `xz`, `txz` | Xarchiver (downloaded locally first) |
 | Email        | `eml`                                                 | Claws Mail (downloaded locally first) |
 | Captures     | `pcap`, `pcapng`, `cap`                               | Wireshark (downloaded locally first) |
-| Other        | anything else                                         | `xdg-open` (desktop default)  |
+| Other        | anything else                                         | Chromium for `http(s)://` URLs, otherwise `xdg-open` |
 
 ## Services
 
@@ -98,7 +98,7 @@ The system exposes two HTTP services. The **control-center** is the public entry
 | GET    | `/api/slots`                 | slot table with per-slot reachability |
 | POST   | `/api/slot/{i}/params`       | forwards `{params:{url,…}}` to slot `i` |
 | ANY    | `/slot/{i}/*`                | reverse-proxy → `<slot[i]>:port` (HTTP + WS) |
-| GET    | `/static/*`                  | embedded UI assets                    |
+| GET    | `/*`                         | embedded UI assets (`/app.js`, `/style.css`) |
 
 #### Environment
 
@@ -166,7 +166,7 @@ VIEWER_SLOTS="kasm://node-1,webtop://node-2"
 
 | Method | Path        | Purpose                                                  |
 |--------|-------------|----------------------------------------------------------|
-| GET    | `/healthz`  | `{"ok": true}`                                           |
+| GET    | `/healthz`  | plain-text `ok`                                          |
 | POST   | `/params`   | validate + atomically write `/tmp/viewdoc.{json,env}`, fork `viewdoc.sh` |
 
 #### Environment
@@ -174,6 +174,26 @@ VIEWER_SLOTS="kasm://node-1,webtop://node-2"
 | Var             | Default     | Purpose                          |
 |-----------------|-------------|----------------------------------|
 | `LISTEN_ADDR`   | `:7000`     | Sidecar bind address (fixed by compose convention) |
+
+## Development
+
+Requires Go **1.27.2+** (`go.mod` pins the toolchain; older Go downloads it automatically) and Docker with Compose v2.
+
+```sh
+make test          # go test ./...
+go vet ./...
+make build         # docker compose build (all three images)
+make cert          # regenerate certs/server.{crt,key} for your host IPs
+```
+
+CI (`.github/workflows/docker.yml`) runs `go vet`, `go test -race`, staticcheck, govulncheck, shellcheck and hadolint, then builds every image. Pushes to `master` publish `linux/amd64` + `linux/arm64` images to Docker Hub:
+
+| Tag                                      | Meaning                          |
+|------------------------------------------|----------------------------------|
+| `dockette/viewdoc:<variant>`             | latest `master` build            |
+| `dockette/viewdoc:<variant>-<short-sha>` | immutable build of that commit   |
+
+`<variant>` is `control-center`, `viewer-kasm` or `viewer-webtop`. The Kasm and Webtop base images are pinned by digest; Dependabot opens weekly PRs for new digests, Go builder images and GitHub Actions.
 
 -----
 
