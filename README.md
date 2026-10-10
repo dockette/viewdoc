@@ -77,11 +77,20 @@ The dispatcher routes by extension:
 | Media        | `mp4`, `mkv`, `webm`, `mov`, `avi`, `mpeg`, `mpg`, `m4v`, `3gp`, `3g2`, `ts`, `mts`, `m2ts`, `vob`, `wmv`, `asf`, `divx`, `ogv`, `mp3`, `wav`, `flac`, `ogg`, `m4a`, `aac`, `opus`, `mka`, `wma`, `aiff`, `ape`, `mid` | VLC |
 | Web / docs   | `pdf`, `html`, `htm`                                  | Chromium (new window)         |
 | Images       | `png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `bmp`     | Chromium (new window)         |
-| Office       | `doc`, `docx`, `odt`, `rtf`, `xls`, `xlsx`, `ods`, `csv`, `ppt`, `pptx`, `odp` | LibreOffice |
-| Archives     | `zip`, `7z`, `rar`, `tar`, `gz`, `tgz`, `bz2`, `tbz2`, `xz`, `txz` | Xarchiver (downloaded locally first) |
-| Email        | `eml`                                                 | Claws Mail (downloaded locally first) |
+| Images (other) | `tif`, `tiff`, `heic`, `heif`, `avif`, `ico`, `tga` | Ristretto (downloaded locally first) |
+| Office       | `doc`, `docx`, `odt`, `rtf`, `xls`, `xlsx`, `ods`, `csv`, `ppt`, `pptx`, `odp`, `odg`, `vsd`, `vsdx`, `pub`, `pages`, `key`, `numbers` | LibreOffice |
+| Ebooks       | `epub`, `djvu`, `xps`, `oxps`, `cbz`, `cbr`, `cb7`    | Atril (downloaded locally first) |
+| Text         | `txt`, `log`, `json`, `yaml`, `yml`, `xml`, `md`, `ini`, `conf`, `cfg`, `toml` | Mousepad (downloaded locally first) |
+| Archives     | `zip`, `7z`, `rar`, `tar`, `gz`, `tgz`, `bz2`, `tbz2`, `xz`, `txz`, `zst`, `tzst` | Xarchiver (downloaded locally first) |
+| Email        | `eml`, `msg`                                          | Claws Mail (downloaded locally first; `.msg` converted via `msgconvert`) |
 | Captures     | `pcap`, `pcapng`, `cap`                               | Wireshark (downloaded locally first) |
-| Other        | anything else                                         | Chromium for `http(s)://` URLs, otherwise `xdg-open` |
+| 3D models    | `stl`, `obj`, `ply`, `glb`, `gltf`, `3ds`, `vtk`, `vtp` | F3D (downloaded locally first) |
+| CAD          | `dxf`                                                 | LibreCAD (downloaded locally first) |
+| Fonts        | `ttf`, `otf`, `ttc`                                   | GNOME Font Viewer (downloaded locally first) |
+| Binaries     | `bin`, `exe`, `dll`, `so`, `o`, `elf`, `dat`, `dmp`   | GHex (downloaded locally first) |
+| Other        | anything else                                         | Chromium, otherwise `xdg-open` |
+
+Only `http://` and `https://` URLs are accepted; anything else is refused before dispatch. Both images also ship `exiftool` for metadata inspection from a terminal, and Office-metric fonts (Liberation, Carlito, Caladea) so documents keep their original layout.
 
 ## Services
 

@@ -17,11 +17,22 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # wireshark-common preseed: we only ever read pcap files, never capture, so
 # answer "no" to the setuid-helper question and skip the interactive prompt.
+# Carlito / Caladea are metric-compatible with Calibri / Cambria (Office's
+# defaults) and Liberation with Arial / Times / Courier, so documents keep
+# their line breaks and page count. unrar (multiverse) adds RAR5.
+# libemail-address-perl is only a Recommends of msgconvert, but it dies
+# without it. HOME stays /home/kasm-user under USER root, so a postinst
+# leaves a root-owned 0700 ~/.cache behind — drop it, or claws-mail (and
+# anything else using the XDG cache dir) can't start as kasm-user.
 RUN echo "wireshark-common wireshark-common/install-setuid boolean false" | debconf-set-selections \
  && DEBIAN_FRONTEND=noninteractive apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       vlc xdg-utils libreoffice xarchiver unzip p7zip-full curl wireshark claws-mail \
- && rm -rf /var/lib/apt/lists/*
+      fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
+      ristretto heif-gdk-pixbuf libavif-gdk-pixbuf atril mousepad \
+      libemail-outlook-message-perl libemail-address-perl unrar zstd \
+      ghex libimage-exiftool-perl f3d librecad gnome-font-viewer \
+ && rm -rf /var/lib/apt/lists/* /home/kasm-user/.cache
 
 # KasmVNC validates pem paths at boot even when require_ssl is false; the
 # entrypoint auto-generates self.pem on first run.

@@ -117,18 +117,19 @@ case "$ext" in
     # Access Policy" modal, which otherwise blocks playback until clicked.
     run vlc --no-qt-privacy-ask --no-video-title-show "$url"
     ;;
-  doc|docx|odt|rtf|xls|xlsx|ods|csv|ppt|pptx|odp)
+  doc|docx|odt|rtf|xls|xlsx|ods|csv|ppt|pptx|odp|odg|vsd|vsdx|pub|pages|key|numbers)
     log "dispatch=soffice ext=$ext url=$url"
     # soffice handles http(s) URLs natively via UCB. --view opens read-only,
     # --norestore kills the "recover document?" prompt after a previous
-    # session, --nologo suppresses the splash.
+    # session, --nologo suppresses the splash. Visio / Publisher / Apple
+    # iWork files go through LibreOffice's libvisio / libmspub / libetonyek.
     run soffice --view --norestore --nologo "$url"
     ;;
-  zip|7z|rar|tar|gz|tgz|bz2|tbz2|xz|txz)
+  zip|7z|rar|tar|gz|tgz|bz2|tbz2|xz|txz|zst|tzst)
     # Archive managers want a local file, not a URL — download first, then
     # open. curl runs synchronously here because the sidecar already forked
     # viewdoc.sh as a separate process, so blocking here doesn't delay the
-    # sidecar's HTTP response.
+    # sidecar's HTTP response. RAR5 needs unrar (p7zip-full only reads RAR4).
     log "dispatch=xarchiver ext=$ext url=$url"
     if tmpfile="$(download)"; then
       run xarchiver "$tmpfile"
@@ -140,17 +141,43 @@ case "$ext" in
       run wireshark -r "$tmpfile"
     fi
     ;;
-  eml)
-    # claws-mail opens .eml files in a message-view window. Without a
-    # pre-seeded account its first-run wizard insists on account setup
-    # before the viewer is reachable, so write a stub local-mbox account
-    # to an isolated config dir — enough for account_get_list() to be
-    # non-empty, which is the condition that suppresses the wizard.
+  eml|msg)
+    # claws-mail has no "open this file" flag that combines with
+    # --alternate-config-dir (a bare file:// is only honoured when it is the
+    # sole argument), so the message goes into a one-message MH mailbox
+    # inside an isolated config dir and --select jumps straight to it. The
+    # stub account keeps account_get_list() non-empty, which is the
+    # condition that suppresses the first-run wizard. Both files are
+    # rewritten every time because claws-mail saves its own copies on exit.
     cfgdir="/tmp/viewdoc-claws"
-    if [ ! -f "$cfgdir/accountrc" ]; then
-      mkdir -p "$cfgdir"
-      printf '<?xml version="1.0" encoding="UTF-8"?>\n<folderlist>\n</folderlist>\n' \
-        > "$cfgdir/folderlist.xml"
+    inbox="$cfgdir/Mail/inbox"
+    log "dispatch=claws-mail ext=$ext url=$url"
+    if tmpfile="$(download)"; then
+      # Outlook .msg is an OLE compound file claws-mail can't read; msgconvert
+      # (libemail-outlook-message-perl) rewrites it as MIME first.
+      if [ "$ext" = msg ]; then
+        eml="${tmpfile%.msg}.eml"
+        if ! msgconvert --outfile "$eml" "$tmpfile" >&2; then
+          log "msgconvert failed url=$url"
+          exit 0
+        fi
+        tmpfile="$eml"
+      fi
+      # A running instance would receive --select over its socket but not
+      # rescan the swapped-out mailbox, so start fresh.
+      if pkill -x claws-mail; then sleep 1; fi
+      rm -rf "$inbox"
+      mkdir -p "$inbox"
+      cp "$tmpfile" "$inbox/1"
+      cat > "$cfgdir/folderlist.xml" <<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<folderlist>
+  <folder type="mh" name="viewdoc" path="$cfgdir/Mail" collapsed="0">
+    <folderitem type="normal" name="viewdoc" path="" />
+    <folderitem type="inbox" name="inbox" path="inbox" />
+  </folder>
+</folderlist>
+XML
       cat > "$cfgdir/accountrc" <<'CFG'
 [Account: 1]
 account_name=local
@@ -159,10 +186,53 @@ address=viewdoc@example.invalid
 protocol=2
 recv_at_getall=0
 CFG
+      run claws-mail --alternate-config-dir "$cfgdir" --select "$inbox/1"
     fi
-    log "dispatch=claws-mail ext=$ext url=$url"
+    ;;
+  tif|tiff|heic|heif|avif|ico|tga)
+    # Formats Chromium won't render. ristretto decodes via gdk-pixbuf, with
+    # heif-gdk-pixbuf / libavif-gdk-pixbuf adding HEIC and AVIF.
+    log "dispatch=ristretto ext=$ext url=$url"
     if tmpfile="$(download)"; then
-      run claws-mail --alternate-config-dir "$cfgdir" "$tmpfile"
+      run ristretto "$tmpfile"
+    fi
+    ;;
+  epub|djvu|xps|oxps|cbz|cbr|cb7)
+    log "dispatch=atril ext=$ext url=$url"
+    if tmpfile="$(download)"; then
+      run atril "$tmpfile"
+    fi
+    ;;
+  txt|log|json|yaml|yml|xml|md|ini|conf|cfg|toml)
+    # Downloaded rather than handed to Chromium: servers often send these as
+    # application/octet-stream, which Chromium saves instead of showing.
+    log "dispatch=mousepad ext=$ext url=$url"
+    if tmpfile="$(download)"; then
+      run mousepad "$tmpfile"
+    fi
+    ;;
+  stl|obj|ply|glb|gltf|3ds|vtk|vtp)
+    log "dispatch=f3d ext=$ext url=$url"
+    if tmpfile="$(download)"; then
+      run f3d "$tmpfile"
+    fi
+    ;;
+  dxf)
+    log "dispatch=librecad ext=$ext url=$url"
+    if tmpfile="$(download)"; then
+      run librecad "$tmpfile"
+    fi
+    ;;
+  ttf|otf|ttc)
+    log "dispatch=gnome-font-viewer ext=$ext url=$url"
+    if tmpfile="$(download)"; then
+      run gnome-font-viewer "$tmpfile"
+    fi
+    ;;
+  bin|exe|dll|so|o|elf|dat|dmp)
+    log "dispatch=ghex ext=$ext url=$url"
+    if tmpfile="$(download)"; then
+      run ghex "$tmpfile"
     fi
     ;;
   *)

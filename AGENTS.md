@@ -94,7 +94,15 @@ Drive the host page with agent-browser (`fill #url-input` + `click #url-form but
 | Media      | VLC window visible playing the media (`vlc --no-qt-privacy-ask --no-video-title-show`).                                                                                                                       |
 | Archive    | Xarchiver window listing the archive contents. Download is synchronous inside the forked hook, capped at 60s — viewdoc.sh blocks on `curl` before launching the GUI.                                          |
 | Capture    | Wireshark window open with the capture loaded (`wireshark -r <file>`); packet list visible.                                                                                                                   |
-| Email      | Claws Mail message-view window showing headers + body + attachment list. viewdoc.sh pre-seeds a stub local-mbox account in `/tmp/viewdoc-claws/` and runs `claws-mail --alternate-config-dir` to suppress the first-run wizard. |
+| Email      | Claws Mail main window with the message selected: headers + body + attachment icons in the message pane. viewdoc.sh rewrites a stub account + one-message MH mailbox in `/tmp/viewdoc-claws/` and runs `claws-mail --alternate-config-dir … --select <msg>` (a bare `file://` arg only works as the sole argument). Any running claws-mail is killed first. |
+| Email (.msg) | Same Claws Mail window; `msgconvert` rewrites the Outlook file as `.eml` next to the download first. |
+| Image (other) | Ristretto window showing the TIFF / HEIC / AVIF image. |
+| Ebook      | Atril window with the first page rendered. |
+| Text       | Mousepad window with the file contents. |
+| 3D model   | F3D window rendering the model (software GL, so expect it to be slow on big meshes). |
+| CAD        | LibreCAD window with the drawing. |
+| Font       | GNOME Font Viewer showing the glyph preview. |
+| Binary     | GHex window with the hex dump. |
 
 When a file load looks broken, check in order:
 1. `curl -sk <host>/api/slot/<i>/params -d '{"params":{"url":"…"}}'` returns `{"ok":true}` — proves the sidecar wrote `/tmp/viewdoc.{json,env}` and forked the hook.
