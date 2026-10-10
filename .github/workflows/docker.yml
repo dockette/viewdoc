@@ -34,6 +34,11 @@ jobs:
         uses: dominikh/staticcheck-action@v1
         with:
           install-go: false
+          # v0.8.1 (latest release) can't read go1.27.2 export data ("export
+          # data version 5 is greater than maximum supported version 4").
+          # Pinned to a master commit verified against go1.27.2; switch
+          # back to a release tag once one newer than v0.8.1 ships.
+          version: "452d5bb86b45"
 
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

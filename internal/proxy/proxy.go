@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -36,25 +37,34 @@ const (
 func ForSlot(s slots.Slot) http.Handler {
 	prefix := s.PathPrefix()
 	target := &url.URL{Scheme: s.VNCScheme, Host: s.VNCAddr()}
-	rp := httputil.NewSingleHostReverseProxy(target)
+	rp := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			// Strip prefix so the upstream sees its native paths.
+			pr.Out.URL.Path = stripPrefix(pr.In.URL.Path, prefix)
+			pr.Out.URL.RawPath = ""
+			// SetURL also sets the outbound Host header to target.Host.
+			pr.SetURL(target)
+			// Rewrite drops inbound X-Forwarded-*; re-append the client like
+			// the old Director-based proxy did. Not SetXForwarded: that also
+			// adds X-Forwarded-Host/Proto, which the upstreams never saw.
+			if ip, _, err := net.SplitHostPort(pr.In.RemoteAddr); err == nil {
+				if prior := pr.In.Header.Values("X-Forwarded-For"); len(prior) > 0 {
+					ip = strings.Join(prior, ", ") + ", " + ip
+				}
+				pr.Out.Header.Set("X-Forwarded-For", ip)
+			}
+			// Force identity encoding so ModifyResponse can patch the body in place.
+			pr.Out.Header.Set("Accept-Encoding", "identity")
+		},
+		ModifyResponse: func(resp *http.Response) error {
+			return rewriteResponse(resp, prefix)
+		},
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+			http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
+		},
+	}
 	if target.Scheme == slots.SchemeHTTPS {
 		rp.Transport = insecureTransport
-	}
-	origDirector := rp.Director
-	rp.Director = func(req *http.Request) {
-		// Strip prefix so the upstream sees its native paths.
-		req.URL.Path = stripPrefix(req.URL.Path, prefix)
-		req.URL.RawPath = ""
-		origDirector(req)
-		req.Host = target.Host
-		// Force identity encoding so ModifyResponse can patch the body in place.
-		req.Header.Set("Accept-Encoding", "identity")
-	}
-	rp.ModifyResponse = func(resp *http.Response) error {
-		return rewriteResponse(resp, prefix)
-	}
-	rp.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
-		http.Error(w, fmt.Sprintf("upstream error: %v", err), http.StatusBadGateway)
 	}
 
 	// Redirect /slot/{i} → /slot/{i}/ so relative URLs in HTML resolve under
