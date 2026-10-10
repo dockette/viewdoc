@@ -48,8 +48,8 @@ Listens on `:8080` (`LISTEN_ADDR`), plus TLS on `TLS_ADDR` when set.
 | Method | Path                     | Purpose |
 |--------|--------------------------|---------|
 | GET    | `/`                      | Landing page with `<iframe>` viewer + JS bridge. |
-| GET    | `/healthz`               | `{ready, total}` slot reachability summary; 503 when no slot is ready. |
-| GET    | `/api/slots`             | `{count, slots:[{idx, host, ip, path, ready}]}`. `ready` = VNC port accepts TCP (sidecar not probed). |
+| GET    | `/healthz`               | `{ready, total}` count of ready slots (VNC + sidecar up); 503 when none is ready. |
+| GET    | `/api/slots`             | `{count, slots:[{idx, host, ip, path, vnc, sidecar, ready}]}`. `vnc` = VNC port accepts TCP, `sidecar` = sidecar `/healthz` returns 200 within 1s, `ready` = both. |
 | POST   | `/api/slot/{i}/params`   | Forwarded verbatim to `<slot[i]>:7000/params`. |
 | POST   | `/api/slot/{i}/restart`  | Forwarded to `<slot[i]>:7000/restart` (requires `Content-Type: application/json`). |
 | ANY    | `/slot/{i}/*`            | Reverse proxy → `<slot[i]>:<novnc>` (HTTP + WS upgrade). |
