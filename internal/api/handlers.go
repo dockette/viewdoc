@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"mime"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -169,25 +172,22 @@ func (h *Handlers) Restart(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, resp.Body)
 }
 
-// paramsForLog renders the sanitized params as space-separated k=v pairs and
-// truncates long values so log lines stay readable.
+// paramsForLog renders the sanitized params as space-separated k=v pairs,
+// sorted by key so identical requests log identically, and truncates long
+// values so log lines stay readable.
 func paramsForLog(p map[string]string) string {
 	if len(p) == 0 {
 		return "(empty)"
 	}
-	var b bytes.Buffer
-	first := true
-	for k, v := range p {
-		if !first {
-			b.WriteByte(' ')
-		}
-		first = false
+	pairs := make([]string, 0, len(p))
+	for _, k := range slices.Sorted(maps.Keys(p)) {
+		v := p[k]
 		if len(v) > 120 {
 			v = v[:117] + "..."
 		}
-		fmt.Fprintf(&b, "%s=%q", k, v)
+		pairs = append(pairs, fmt.Sprintf("%s=%q", k, v))
 	}
-	return b.String()
+	return strings.Join(pairs, " ")
 }
 
 func probe(addr string) bool {

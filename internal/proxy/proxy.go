@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -137,30 +138,30 @@ func rewriteResponse(resp *http.Response, prefix string) error {
 //
 // What the shim does, top to bottom:
 //
-//   1. _viewdocSecure_ = true — kclient (Webtop) gates VideoDecoder access on
-//      `isSecureContext`. The body rewriter renames that property in the JS
-//      bundle to `_viewdocSecure_`, and we set it true here so the gate clears
-//      over plain http.
+//  1. _viewdocSecure_ = true — kclient (Webtop) gates VideoDecoder access on
+//     `isSecureContext`. The body rewriter renames that property in the JS
+//     bundle to `_viewdocSecure_`, and we set it true here so the gate clears
+//     over plain http.
 //
-//   2. Seed KasmVNC clipboard settings in localStorage. KasmVNC 1.18 detects
-//      iframe embedding (window.self !== window.top) and, unless the URL has
-//      ?show_control_bar=…, takes an "embedded" branch that initSettings
-//      clipboard_up/down/seamless = false — deliberately disabling host↔guest
-//      clipboard sync. initSetting is a no-op when the key already exists, so
-//      writing them here wins and leaves the rest of the embedded-mode chrome
-//      (hidden control bar, resize=remote) intact. Webtop's kclient uses
-//      different, URL-prefixed keys so it's unaffected.
+//  2. Seed KasmVNC clipboard settings in localStorage. KasmVNC 1.18 detects
+//     iframe embedding (window.self !== window.top) and, unless the URL has
+//     ?show_control_bar=…, takes an "embedded" branch that initSettings
+//     clipboard_up/down/seamless = false — deliberately disabling host↔guest
+//     clipboard sync. initSetting is a no-op when the key already exists, so
+//     writing them here wins and leaves the rest of the embedded-mode chrome
+//     (hidden control bar, resize=remote) intact. Webtop's kclient uses
+//     different, URL-prefixed keys so it's unaffected.
 //
-//   3. wrap()/WebSocket/fetch/XHR/EventSource patches — rewrite any same-origin
-//      absolute URL the upstream JS constructs at runtime (`/websockify`,
-//      `/api/audio`, …) to prepend the slot prefix. Comparing URL.host (not
-//      origin) is deliberate: ws:// URLs have a different scheme than the
-//      page's https://, so origin never matches and KasmVNC's
-//      `new WebSocket("wss://host:8443/websockify")` would slip through.
+//  3. wrap()/WebSocket/fetch/XHR/EventSource patches — rewrite any same-origin
+//     absolute URL the upstream JS constructs at runtime (`/websockify`,
+//     `/api/audio`, …) to prepend the slot prefix. Comparing URL.host (not
+//     origin) is deliberate: ws:// URLs have a different scheme than the
+//     page's https://, so origin never matches and KasmVNC's
+//     `new WebSocket("wss://host:8443/websockify")` would slip through.
 //
-//   4. console hook — forwards each iframe's console messages to the parent
-//      via postMessage so DevTools on the outer page shows a unified
-//      "[slot N] …" stream instead of requiring frame-filter juggling.
+//  4. console hook — forwards each iframe's console messages to the parent
+//     via postMessage so DevTools on the outer page shows a unified
+//     "[slot N] …" stream instead of requiring frame-filter juggling.
 const htmlShimTemplate = `<script>
 (function () {
   window._viewdocSecure_ = true;
@@ -263,38 +264,10 @@ const htmlShimTemplate = `<script>
 </script>`
 
 func htmlShim(prefix string) string {
-	p, _ := jsonString(prefix)
+	// json.Marshal also escapes <, > and &, so the prefix can never close
+	// the surrounding <script> tag.
+	p, _ := json.Marshal(prefix)
 	return fmt.Sprintf(htmlShimTemplate, p)
-}
-
-// jsonString produces a JSON-encoded string literal without pulling in encoding/json.
-func jsonString(s string) (string, error) {
-	var b strings.Builder
-	b.WriteByte('"')
-	for _, r := range s {
-		switch r {
-		case '"', '\\', '/':
-			b.WriteByte('\\')
-			b.WriteRune(r)
-		case '\n':
-			b.WriteString(`\n`)
-		case '\r':
-			b.WriteString(`\r`)
-		case '\t':
-			b.WriteString(`\t`)
-		default:
-			if r < 0x20 {
-				b.WriteString(`\u00`)
-				const hex = "0123456789abcdef"
-				b.WriteByte(hex[r>>4])
-				b.WriteByte(hex[r&0xf])
-			} else {
-				b.WriteRune(r)
-			}
-		}
-	}
-	b.WriteByte('"')
-	return b.String(), nil
 }
 
 func rewriteBody(resp *http.Response, fn func([]byte) []byte) error {

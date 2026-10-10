@@ -36,7 +36,7 @@
 
   function getSlotState(idx) {
     let s = slotState.get(idx);
-    if (!s) { s = { frame: null, state: 'idle' }; slotState.set(idx, s); }
+    if (!s) { s = { frame: null, state: 'idle', pushedURL: null }; slotState.set(idx, s); }
     return s;
   }
 
@@ -185,12 +185,16 @@
     u.searchParams.set('slot', String(i));
     history.replaceState(null, '', u);
 
+    // Open the current ?url= doc in a slot the first time it's shown, not on
+    // every tab switch — re-sending stacks duplicate windows in apps that
+    // hand off to an already-running instance.
     const docURL = u.searchParams.get('url');
-    if (docURL) pushParams({ url: docURL });
+    if (docURL && getSlotState(i).pushedURL !== docURL) pushParams({ url: docURL });
   }
 
   async function pushParams(p) {
     console.log(`[viewdoc] push slot=${activeSlot}`, p);
+    if (p.url) getSlotState(activeSlot).pushedURL = p.url;
     try {
       const r = await fetch(`/api/slot/${activeSlot}/params`, {
         method: 'POST',
