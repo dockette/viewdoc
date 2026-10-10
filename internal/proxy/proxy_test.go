@@ -88,7 +88,8 @@ func TestForSlotRewritesBodies(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/slot/3/", nil))
 	body := rec.Body.String()
-	if !strings.HasPrefix(body, "<html><head><script>") || !strings.Contains(body, `var P = "\/slot\/3";`) {
+	// Accept "\/slot\/3" and "/slot/3": both are valid JSON for the prefix.
+	if !strings.HasPrefix(body, "<html><head><script>") || !strings.Contains(strings.ReplaceAll(body, `\/`, "/"), `var P = "/slot/3";`) {
 		t.Errorf("HTML shim not injected after <head>: %.120q", body)
 	}
 	if rec.Header().Get("Content-Length") != strconv.Itoa(len(body)) {
