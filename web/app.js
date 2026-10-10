@@ -4,6 +4,7 @@
   const form = document.getElementById('url-form');
   const input = document.getElementById('url-input');
   const resetBtn = document.getElementById('url-reset');
+  const restartBtn = document.getElementById('slot-restart');
 
   // Surface iframe console messages on the outer page so a single DevTools
   // console shows everything across slots. The shim in proxy.go posts these.
@@ -83,6 +84,10 @@
     slots = next;
     slots.forEach((s) => {
       const cur = getSlotState(s.idx);
+      if (cur.state === 'restarting') {
+        trackRestart(s);
+        return;
+      }
       if (!s.ready) {
         if (cur.state !== 'down') setSlotState(s.idx, 'down');
       } else if (cur.state === 'down') {
@@ -90,6 +95,55 @@
       }
     });
     renderTabs();
+  }
+
+  // A restart is done once the slot has gone down and come back up — reloading
+  // the iframe any earlier would reconnect to the dying desktop. The timeout
+  // covers a restart that never took the slot down (old image without the
+  // restart wrapper) so the tab doesn't blink forever.
+  const RESTART_TIMEOUT_MS = 60000;
+
+  function trackRestart(s) {
+    const cur = getSlotState(s.idx);
+    if (!s.ready) cur.sawDown = true;
+    const done = s.ready && (cur.sawDown || Date.now() - cur.restartAt > RESTART_TIMEOUT_MS);
+    if (!done) return;
+    cur.state = 'idle';
+    if (s.idx === activeSlot) ensureFrame(s.idx).classList.add('active');
+  }
+
+  async function restartSlot(idx) {
+    const cur = getSlotState(idx);
+    if (cur.state === 'restarting') return;
+    if (!confirm(`Restart slot ${idx + 1}? Anything open in it will be closed.`)) return;
+    console.log(`[viewdoc] restart slot=${idx}`);
+    try {
+      const r = await fetch(`/api/slot/${idx}/restart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (!r.ok) {
+        console.warn(`[viewdoc] restart slot=${idx} HTTP ${r.status}`);
+        return;
+      }
+    } catch (e) {
+      console.error(`[viewdoc] restart slot=${idx} failed`, e);
+      return;
+    }
+    // Drop the iframe now so the websocket closes cleanly instead of leaving
+    // a stale KasmVNC primary-client lock behind.
+    if (cur.frame) {
+      cur.frame.remove();
+      cur.frame = null;
+    }
+    cur.sawDown = false;
+    cur.restartAt = Date.now();
+    setSlotState(idx, 'restarting');
+    const poll = setInterval(async () => {
+      await loadSlots();
+      if (getSlotState(idx).state !== 'restarting') clearInterval(poll);
+    }, 2000);
   }
 
   function renderTabs() {
@@ -122,8 +176,8 @@
       if (!s.frame) return;
       s.frame.classList.toggle('active', idx === i);
     });
-    const f = ensureFrame(i);
-    f.classList.add('active');
+    // A restarting slot gets its frame back from trackRestart once it's up.
+    if (getSlotState(i).state !== 'restarting') ensureFrame(i).classList.add('active');
 
     renderTabs();
 
@@ -166,6 +220,8 @@
     history.replaceState(null, '', u);
     input.focus();
   });
+
+  restartBtn.addEventListener('click', () => restartSlot(activeSlot));
 
   const initialURL = params.get('url');
   if (initialURL) input.value = initialURL;

@@ -115,6 +115,7 @@ header {
 .tab-idle      .led { background: var(--led-idle); }
 .tab-loading   .led { background: var(--led-loading); animation: blink 1s ease-in-out infinite; }
 .tab-connected .led { background: var(--led-connected); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset, 0 0 6px var(--led-connected); }
+.tab-restarting .led { background: var(--led-down); animation: blink 1s ease-in-out infinite; }
 .tab-down      .led { background: var(--led-down); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset, 0 0 6px var(--led-down); }
 
 @keyframes blink {
