@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/dockette/viewdoc/internal/sanitize"
+	"github.com/dockette/viewdoc/internal/version"
 )
 
 const (
@@ -73,7 +74,7 @@ func main() {
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	log.Printf("sidecar listening on %s", addr)
+	log.Printf("viewdoc sidecar %s listening on %s", version.Version, addr)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("listen: %v", err)
 	}
@@ -133,7 +134,9 @@ func handleRestart(w http.ResponseWriter, _ *http.Request) {
 // app it launched is still up. Phase "idle" means no request since start.
 func handleStatus(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(readStatus())
+	st := readStatus()
+	st.Version = version.Version
+	_ = json.NewEncoder(w).Encode(st)
 }
 
 type status struct {
@@ -144,6 +147,7 @@ type status struct {
 	Updated  string `json:"updated,omitempty"`
 	AppState string `json:"app_state,omitempty"` // running|handoff|exited
 	ExitCode *int   `json:"exit_code,omitempty"`
+	Version  string `json:"version"` // viewer image release
 }
 
 func readStatus() status {

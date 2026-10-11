@@ -18,6 +18,7 @@ import (
 
 	"github.com/dockette/viewdoc/internal/sanitize"
 	"github.com/dockette/viewdoc/internal/slots"
+	"github.com/dockette/viewdoc/internal/version"
 )
 
 type Handlers struct {
@@ -102,7 +103,7 @@ func (h *Handlers) Healthz(w http.ResponseWriter, _ *http.Request) {
 	if ready == 0 {
 		status = http.StatusServiceUnavailable
 	}
-	writeJSON(w, status, map[string]any{"ready": ready, "total": len(entries)})
+	writeJSON(w, status, map[string]any{"ready": ready, "total": len(entries), "version": version.Version})
 }
 
 func (h *Handlers) Params(w http.ResponseWriter, r *http.Request) {

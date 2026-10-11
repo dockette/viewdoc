@@ -2,17 +2,20 @@
 # Go toolchain under QEMU.
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS sidecar
 ARG TARGETOS TARGETARCH
+ARG VERSION=dev
 WORKDIR /src
 COPY go.mod ./
 COPY internal ./internal
 COPY cmd/sidecar ./cmd/sidecar
 ENV CGO_ENABLED=0
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/sidecar ./cmd/sidecar
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X github.com/dockette/viewdoc/internal/version.Version=$VERSION" -o /out/sidecar ./cmd/sidecar
 
 # Base pinned by digest for reproducible builds; Dependabot bumps it
 # (.github/dependabot.yml).
 FROM lscr.io/linuxserver/webtop:ubuntu-xfce@sha256:c766271bf5de1c7c8c6cd7be1ae4015953f1b45a9325dbc1c94f7a163ff7ffc7
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ARG VERSION=dev
+LABEL org.opencontainers.image.version=$VERSION
 
 # wireshark-common preseed: we only ever read pcap files, never capture, so
 # answer "no" to the setuid-helper question and skip the interactive prompt.

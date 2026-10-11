@@ -12,6 +12,7 @@ Remote streaming sandbox for **viewing files** (PDF, office docs, video, audio, 
 4. **Static slot topology.** Slots declared in `docker-compose.yml` and discovered by DNS hostname on the compose network.
 5. **HTTP sidecar for params.** Each viewer image runs a tiny sidecar on `:7000` by default (override per-slot in `VIEWER_SLOTS` or globally via `VIEWER_SIDECAR_DEFAULT_PORT`); control-center pushes params via `POST http://<sidecar-host>:<sidecar-port>/params`.
 6. **Stateless slot selection.** Slot picked by `?slot=<i>` (default `0`) or `?slot=auto` (random ready slot).
+7. **Date versions.** `VERSION` holds `YYYY.MM.DD` (`.N` for a same-day re-release), bumped by `make release`; it's built into both binaries (`internal/version`, via `-ldflags -X`), tags images `<variant>-<VERSION>`, and CI creates the matching GitHub release. See README → *Versions*.
 
 ## Architecture
 

@@ -27,6 +27,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args: &version
+        VERSION: ${VIEWDOC_VERSION:-dev}
     image: dockette/viewdoc:control-center
     environment:
       # Kasm runs KasmVNC on :6901 (https, self-signed; proxy skips verify).
@@ -68,6 +70,7 @@ services:
     build:
       context: .
       dockerfile: .docker/kasm/Dockerfile
+      args: *version
 
   viewer-kasm-2:
     <<: *kasm
@@ -78,6 +81,7 @@ services:
     build:
       context: .
       dockerfile: .docker/webtop/Dockerfile
+      args: *version
 
   viewer-webtop-2:
     <<: *webtop
