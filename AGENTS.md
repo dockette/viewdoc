@@ -8,7 +8,7 @@ Remote streaming sandbox for **viewing files** (PDF, office docs, video, audio, 
 
 1. **Go stdlib.** Single static binary built on `net/http` + `httputil.ReverseProxy`.
 2. **N slots, default 4** (2× Kasm + 2× Webtop, matching `docker-compose.yml`). Configured via `VIEWER_SLOTS` — comma-separated entries of the form `<vnc>[|<sidecar>]`. The vnc half accepts `http(s)://host[:port]`, plus two pseudo-schemes — `kasm://host[:port]` expands to `https://host:<VIEWER_KASM_DEFAULT_PORT>` (default `6901`), and `webtop://host[:port]` expands to `http://host:<VIEWER_WEBTOP_DEFAULT_PORT>` (default `3000`). The sidecar half accepts `http(s)://host[:port]`; when omitted, the sidecar inherits the vnc host on `VIEWER_SIDECAR_DEFAULT_PORT` (default `7000`). Mixed pools are first-class. See **README.md → Slot configuration** for worked examples.
-3. **Plain HTTP inside, optional TLS outside.** Cleartext across the compose network (Kasm's own self-signed `:6901` is proxied with skip-verify). The control-center additionally serves TLS on `TLS_ADDR` (compose: `:8443`) with the self-signed cert embedded from `certs/server.{crt,key}` (regenerate via `make cert`) — browsers need a secure context for clipboard access.
+3. **Plain HTTP inside, optional TLS outside.** Cleartext across the compose network (Kasm's own self-signed `:6901` is proxied with skip-verify). The control-center additionally serves TLS on `TLS_ADDR` (compose: `:8443`) (browsers need a secure context for clipboard access). `TLS_CERT` picks the cert (`internal/tlsself`): `embedded` (default — the pre-generated self-signed pair in `certs/server.{crt,key}`, regenerate via `make cert`), `generate` (on demand; persisted in `TLS_CERT_DIR`, extra SANs via `TLS_HOSTS`) or `file` (your own `TLS_CERT_FILE` + `TLS_KEY_FILE`). See README → *TLS certificate*.
 4. **Static slot topology.** Slots declared in `docker-compose.yml` and discovered by DNS hostname on the compose network.
 5. **HTTP sidecar for params.** Each viewer image runs a tiny sidecar on `:7000` by default (override per-slot in `VIEWER_SLOTS` or globally via `VIEWER_SIDECAR_DEFAULT_PORT`); control-center pushes params via `POST http://<sidecar-host>:<sidecar-port>/params`.
 6. **Stateless slot selection.** Slot picked by `?slot=<i>` (default `0`) or `?slot=auto` (random ready slot).
@@ -143,7 +143,7 @@ Useful flags: `--headed` to watch a run, `--session <name>` to isolate parallel 
 
 ## What NOT to do
 
-- ❌ No TLS between containers, no ACME / real certs, no openssl — the only TLS is the control-center's optional self-signed listener.
+- ❌ No TLS between containers, no ACME / cert issuance, no openssl — the only TLS is the control-center's optional listener, with an embedded, generated or operator-supplied cert (`TLS_CERT`).
 - ❌ No `/var/run/docker.sock`, no `docker exec`, no docker-cli inside any container.
 - ❌ No dynamic slot spawning at runtime.
 - ❌ No pool leasing / session IDs / TTL logic.

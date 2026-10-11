@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -50,11 +51,20 @@ func main() {
 	var tlsCfg *tls.Config
 	if tlsAddr != "" {
 		var err error
-		tlsCfg, err = tlsself.Load(viewdoc.ServerCert, viewdoc.ServerKey)
+		var src string
+		tlsCfg, src, err = tlsself.Config(tlsself.Options{
+			Mode:         envOr("TLS_CERT", ""),
+			EmbeddedCert: viewdoc.ServerCert,
+			EmbeddedKey:  viewdoc.ServerKey,
+			Dir:          envOr("TLS_CERT_DIR", ""),
+			Hosts:        splitList(envOr("TLS_HOSTS", "")),
+			CertFile:     envOr("TLS_CERT_FILE", ""),
+			KeyFile:      envOr("TLS_KEY_FILE", ""),
+		})
 		if err != nil {
 			log.Fatalf("tls cert: %v", err)
 		}
-		log.Print("TLS enabled with embedded self-signed cert (certs/server.{crt,key})")
+		log.Printf("TLS cert %s", src)
 	}
 
 	mux := http.NewServeMux()
@@ -135,6 +145,17 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// splitList splits a comma-separated env value, dropping blanks.
+func splitList(v string) []string {
+	var out []string
+	for _, f := range strings.Split(v, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func envPort(k string, def int) int {
