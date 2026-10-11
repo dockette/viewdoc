@@ -10,9 +10,14 @@ COPY web ./web
 COPY certs ./certs
 COPY cmd/control-center ./cmd/control-center
 ENV CGO_ENABLED=0
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/control-center ./cmd/control-center
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/control-center ./cmd/control-center \
+ && mkdir -p /out/certs
 
 FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=build /out/control-center /control-center
+# Mount point for TLS_CERT=generate with TLS_CERT_DIR=/certs, owned by nonroot
+# so a fresh named volume mounted here inherits that ownership and the
+# generated cert can be written.
+COPY --from=build --chown=65532:65532 /out/certs /certs
 EXPOSE 8080
 ENTRYPOINT ["/control-center"]

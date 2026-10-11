@@ -116,11 +116,25 @@ The system exposes two HTTP services. The **control-center** is the public entry
 | Var                            | Default                       | Purpose                                                                                              |
 |--------------------------------|-------------------------------|------------------------------------------------------------------------------------------------------|
 | `LISTEN_ADDR`                  | `:8080`                       | Plain-HTTP bind address                                                                              |
-| `TLS_ADDR`                     | _(unset)_                     | If set, also bind TLS (self-signed cert)                                                             |
+| `TLS_ADDR`                     | _(unset)_                     | If set, also bind TLS. The cert comes from `TLS_CERT` (see **TLS certificate** below).                |
+| `TLS_CERT`                     | _(inferred)_                  | `embedded`, `generate` or `file`. Unset: `file` if `TLS_CERT_FILE` is set, `generate` if `TLS_CERT_DIR` is set, else `embedded`. |
+| `TLS_CERT_DIR`                 | _(unset)_                     | `generate`: keep the cert here (`server.crt` + `server.key`) so it survives restarts. Unset = new in-memory cert on every start. |
+| `TLS_HOSTS`                    | _(unset)_                     | `generate`: extra comma-separated IPs / DNS names for a new cert.                                    |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | _(unset)_                    | `file`: paths to your own PEM cert (full chain) and key.                                             |
 | `VIEWER_SLOTS`                 | `kasm://viewer-kasm-1,kasm://viewer-kasm-2,webtop://viewer-webtop-1,webtop://viewer-webtop-2` (the compose services) | Comma-separated slot list. See **Slot configuration** below for the full grammar.                    |
 | `VIEWER_KASM_DEFAULT_PORT`     | `6901`                        | VNC port used for bare entries and the `kasm://` pseudo-scheme.                                      |
 | `VIEWER_WEBTOP_DEFAULT_PORT`   | `3000`                        | VNC port used for the `webtop://` pseudo-scheme.                                                     |
 | `VIEWER_SIDECAR_DEFAULT_PORT`  | `7000`                        | Sidecar port used when the sidecar half of a slot entry is omitted (or specifies no port).           |
+
+#### TLS certificate
+
+`TLS_ADDR` serves the same UI over HTTPS (browsers only allow clipboard access in a secure context). The startup log prints which cert is used and its SHA-256 fingerprint.
+
+| `TLS_CERT` | Cert used | When to use it |
+|------------|-----------|----------------|
+| `embedded` _(default)_ | Pre-generated self-signed pair from `certs/`, embedded in the image (`make cert` regenerates it). | Local and trusted networks: same fingerprint everywhere, so the browser's "accept once" sticks. The key is public in this repo, so it gives no real protection. |
+| `generate` | Self-signed pair generated on first start. With `TLS_CERT_DIR` it's written there (key `0600`) and reused, so the fingerprint stays stable; compose mounts a `certs` volume at `/certs` for this. Without it, a new in-memory cert on every start. Delete the files to regenerate. | A private key per deployment. Always covers `localhost`, `127.0.0.1`, `::1`, plus `TLS_HOSTS`. |
+| `file` | `TLS_CERT_FILE` + `TLS_KEY_FILE`, read at startup. | Your own cert, e.g. from your CA or Let's Encrypt (mount the files read-only). |
 
 #### Slot configuration
 
@@ -214,7 +228,7 @@ Requires Go **1.27.2+** (`go.mod` pins the toolchain; older Go downloads it auto
 make test          # go test ./...
 go vet ./...
 make build         # docker compose build (all three images)
-make cert          # regenerate certs/server.{crt,key} for your host IPs
+make cert          # regenerate the embedded certs/server.{crt,key} for your host IPs
 ```
 
 CI (`.github/workflows/docker.yml`) runs `go vet`, `go test -race`, staticcheck, govulncheck, shellcheck and hadolint, then builds every image. Pushes to `master` publish `linux/amd64` + `linux/arm64` images to Docker Hub:

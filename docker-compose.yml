@@ -11,6 +11,18 @@ services:
       # the JS at response time to bypass the check (see internal/proxy/proxy.go).
       VIEWER_SLOTS: "https://viewer-kasm-1:6901,https://viewer-kasm-2:6901,viewer-webtop-1:3000,viewer-webtop-2:3000"
       TLS_ADDR: ":8443"
+      # TLS cert source (README → TLS certificate). Default: the pre-generated
+      # self-signed cert embedded in the image.
+      #   On-demand, kept in the certs volume across restarts:
+      #     TLS_CERT: "generate"
+      #     TLS_CERT_DIR: "/certs"
+      #     TLS_HOSTS: "viewdoc.lan,192.168.1.10"
+      #   Your own cert (mount it, e.g. ./tls:/tls:ro):
+      #     TLS_CERT: "file"
+      #     TLS_CERT_FILE: "/tls/fullchain.pem"
+      #     TLS_KEY_FILE: "/tls/privkey.pem"
+    volumes:
+      - certs:/certs
     ports:
       - "8080:8080"
       - "8443:8443"
@@ -62,3 +74,6 @@ services:
 
 networks:
   viewdoc:
+
+volumes:
+  certs:
