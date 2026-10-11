@@ -5,6 +5,7 @@
   const input = document.getElementById('url-input');
   const resetBtn = document.getElementById('url-reset');
   const restartBtn = document.getElementById('slot-restart');
+  const statusEl = document.getElementById('slot-status');
 
   // Surface iframe console messages on the outer page so a single DevTools
   // console shows everything across slots. The shim in proxy.go posts these.
@@ -196,6 +197,54 @@
     // hand off to an already-running instance.
     const docURL = u.searchParams.get('url');
     if (docURL && getSlotState(i).pushedURL !== docURL) pushParams({ url: docURL });
+    else loadStatus();
+  }
+
+  // Status of the active slot's latest request (sidecar GET /status). Polled
+  // fast while a request is in flight, slowly otherwise; statusGen drops
+  // responses that arrive after a newer poll or a tab switch.
+  const BUSY_PHASES = new Set(['queued', 'downloading']);
+  let statusGen = 0;
+  let statusTimer = null;
+
+  async function loadStatus() {
+    const gen = ++statusGen;
+    const idx = activeSlot;
+    clearTimeout(statusTimer);
+    let st = null;
+    if (getSlotState(idx).state !== 'restarting') {
+      try {
+        const r = await fetch(`/api/slot/${idx}/status`);
+        if (r.ok) st = await r.json();
+      } catch {}
+    }
+    if (gen !== statusGen) return;
+    renderStatus(st);
+    statusTimer = setTimeout(loadStatus, st && BUSY_PHASES.has(st.phase) ? 1000 : 5000);
+  }
+
+  function describeStatus(st) {
+    const app = st.app || 'app';
+    switch (st.phase) {
+      case 'queued': return ['queued…', 'busy'];
+      case 'downloading': return [`${app}: downloading…`, 'busy'];
+      case 'refused': return [`refused: ${st.error || 'invalid URL'}`, 'error'];
+      case 'failed': return [`${app}: ${st.error || 'failed'}`, 'error'];
+      case 'deduped': return ['already open', 'ok'];
+      case 'launched':
+        if (st.app_state === 'exited') {
+          return st.exit_code ? [`${app} exited (${st.exit_code})`, 'error'] : [`${app} closed`, ''];
+        }
+        return [`${app} · open`, 'ok'];
+      default: return ['', ''];
+    }
+  }
+
+  function renderStatus(st) {
+    const [text, kind] = st ? describeStatus(st) : ['', ''];
+    statusEl.textContent = text;
+    statusEl.className = kind ? `status-${kind}` : '';
+    statusEl.title = st && st.url ? `${st.url}${st.updated ? ` · ${st.updated}` : ''}` : '';
   }
 
   async function pushParams(p) {
@@ -211,6 +260,7 @@
     } catch (e) {
       console.error(`[viewdoc] push slot=${activeSlot} failed`, e);
     }
+    loadStatus();
   }
 
   form.addEventListener('submit', (e) => {

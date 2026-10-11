@@ -14,7 +14,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/dockette/viewdoc/internal/sanitize"
@@ -34,14 +36,28 @@ const (
 	restartExitCode = 42
 )
 
+// Shared with viewdoc.sh. Vars so tests can point them at a temp dir.
+var (
+	// statusPath holds key=value lines describing the latest request:
+	// phase (queued|refused|deduped|downloading|failed|launched), url, app,
+	// error, updated.
+	statusPath = "/tmp/viewdoc.status"
+	// statePath is "<pid> <running|handoff|exited> [rc]" for the last app
+	// viewdoc.sh launched.
+	statePath = "/tmp/.viewdoc_last_state"
+)
+
 func main() {
 	addr := envOr("LISTEN_ADDR", ":7000")
 
 	// viewdoc.sh skips a URL equal to the last one it opened. Compose's
 	// restart policy reuses the container (and its /tmp), so a fresh
 	// desktop would otherwise refuse to reopen the pre-restart URL.
-	if err := os.Remove(lastPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		log.Printf("clear %s: %v", lastPath, err)
+	// The status of a pre-restart request would be stale for the same reason.
+	for _, p := range []string{lastPath, statusPath} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			log.Printf("clear %s: %v", p, err)
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -50,6 +66,7 @@ func main() {
 	})
 	mux.HandleFunc("POST /params", handleParams)
 	mux.HandleFunc("POST /restart", handleRestart)
+	mux.HandleFunc("GET /status", handleStatus)
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -85,6 +102,11 @@ func handleParams(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Mark the request as queued right away so /status never shows the
+	// previous request's outcome while viewdoc.sh is still starting.
+	if err := writeStatus("queued", clean["url"]); err != nil {
+		log.Printf("write status: %v", err)
+	}
 	go fireHook()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -105,6 +127,92 @@ func handleRestart(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(200 * time.Millisecond)
 		os.Exit(restartExitCode)
 	}()
+}
+
+// handleStatus reports what happened to the latest request, plus whether the
+// app it launched is still up. Phase "idle" means no request since start.
+func handleStatus(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(readStatus())
+}
+
+type status struct {
+	Phase    string `json:"phase"`
+	URL      string `json:"url,omitempty"`
+	App      string `json:"app,omitempty"`
+	Error    string `json:"error,omitempty"`
+	Updated  string `json:"updated,omitempty"`
+	AppState string `json:"app_state,omitempty"` // running|handoff|exited
+	ExitCode *int   `json:"exit_code,omitempty"`
+}
+
+func readStatus() status {
+	b, err := os.ReadFile(statusPath)
+	if err != nil {
+		return status{Phase: "idle"}
+	}
+	var st status
+	for line := range strings.Lines(string(b)) {
+		k, v, _ := strings.Cut(strings.TrimRight(line, "\n"), "=")
+		switch k {
+		case "phase":
+			st.Phase = v
+		case "url":
+			st.URL = v
+		case "app":
+			st.App = v
+		case "error":
+			st.Error = v
+		case "updated":
+			st.Updated = v
+		}
+	}
+	// Only these phases refer to the app recorded in statePath.
+	if st.Phase == "launched" || st.Phase == "deduped" {
+		st.AppState, st.ExitCode = readAppState()
+	}
+	return st
+}
+
+// readAppState interprets statePath. A "running" pid that no longer exists
+// (killed, or a container restart reused /tmp) is reported as exited.
+func readAppState() (string, *int) {
+	b, err := os.ReadFile(statePath)
+	if err != nil {
+		return "", nil
+	}
+	f := strings.Fields(string(b))
+	if len(f) < 2 {
+		return "", nil
+	}
+	var code *int
+	if len(f) > 2 {
+		if n, err := strconv.Atoi(f[2]); err == nil {
+			code = &n
+		}
+	}
+	if f[1] == "running" {
+		pid, err := strconv.Atoi(f[0])
+		if err != nil || !alive(pid) {
+			return "exited", code
+		}
+	}
+	return f[1], code
+}
+
+// alive reports whether pid exists; EPERM means it does, owned by another user.
+func alive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
+func writeStatus(phase, url string) error {
+	url = strings.ReplaceAll(url, "\n", " ")
+	return atomicWrite(statusPath, fmt.Appendf(nil, "phase=%s\nurl=%s\napp=\nerror=\nupdated=%s\n",
+		phase, url, time.Now().UTC().Format(time.RFC3339)))
 }
 
 func writeQuery(m map[string]string) error {

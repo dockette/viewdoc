@@ -97,3 +97,43 @@ func TestHealthzUnavailableWithoutReadySlot(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body %s", rec.Code, http.StatusServiceUnavailable, rec.Body)
 	}
 }
+
+func TestStatusRelaysSidecar(t *testing.T) {
+	const body = `{"phase":"launched","app":"vlc","app_state":"running"}` + "\n"
+	sc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/status" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(sc.Close)
+
+	pool, err := slots.FromCSV("http://"+closedAddr(t)+"|"+sc.URL+",http://"+closedAddr(t)+"|http://"+closedAddr(t), slots.Defaults{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/slot/{idx}/status", New(pool).Status)
+
+	cases := []struct {
+		path     string
+		wantCode int
+		wantBody string
+	}{
+		{"/api/slot/0/status", http.StatusOK, body},
+		{"/api/slot/1/status", http.StatusBadGateway, ""},
+		{"/api/slot/9/status", http.StatusNotFound, ""},
+		{"/api/slot/x/status", http.StatusNotFound, ""},
+	}
+	for _, c := range cases {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, c.path, nil))
+		if rec.Code != c.wantCode {
+			t.Errorf("%s: code %d, want %d", c.path, rec.Code, c.wantCode)
+		}
+		if c.wantBody != "" && rec.Body.String() != c.wantBody {
+			t.Errorf("%s: body %q, want %q", c.path, rec.Body.String(), c.wantBody)
+		}
+	}
+}

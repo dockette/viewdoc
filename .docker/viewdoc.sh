@@ -12,6 +12,8 @@ QUERY_ENV="/tmp/viewdoc.env"
 LAST="/tmp/.viewdoc_last_url"
 STATE="/tmp/.viewdoc_last_state"
 LOG="/tmp/viewdoc.log"
+# Latest outcome for the sidecar's GET /status (key=value lines).
+STATUS="/tmp/viewdoc.status"
 # A launcher that exits 0 faster than this handed the URL to an already
 # running instance (chromium, soffice, xdg-open) rather than failing.
 HANDOFF_SECS=5
@@ -25,6 +27,18 @@ log() {
   printf '%s\n' "$msg" >&2 || true
 }
 
+# status <phase> [app] [error] — records the outcome of this request for the
+# sidecar's GET /status. Never load-bearing, like log().
+status() {
+  {
+    printf 'phase=%s\n' "$1"
+    printf 'url=%s\n' "$(printf '%s' "$url" | tr '\n' ' ')"
+    printf 'app=%s\n' "${2:-}"
+    printf 'error=%s\n' "${3:-}"
+    printf 'updated=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$STATUS.$$" 2>/dev/null && mv -f "$STATUS.$$" "$STATUS" 2>/dev/null || true
+}
+
 [ -r "$QUERY_ENV" ] || { log "no $QUERY_ENV; nothing to do"; exit 0; }
 # shellcheck disable=SC1090
 . "$QUERY_ENV"
@@ -35,13 +49,14 @@ if [ -z "$url" ]; then
   exit 0
 fi
 
-# $STATE is "<pid> <running|handoff|exited>" for the launch that wrote $LAST.
+# $STATE is "<pid> <running|handoff|exited> [rc]" for the launch that wrote
+# $LAST (rc once it has exited).
 # The URL counts as still open while that launch's process is alive, or when
 # it handed off to an existing instance (whose window we can't track). A
 # crashed or closed app ("exited") lets the same URL open again.
 is_open() {
   local pid state
-  read -r pid state < "$STATE" 2>/dev/null || return 1
+  read -r pid state _ < "$STATE" 2>/dev/null || return 1
   case "$state" in
     handoff) return 0 ;;
     running) kill -0 "$pid" 2>/dev/null ;;
@@ -53,11 +68,12 @@ is_open() {
 # "--version.mp4" would be parsed as an option. Only real URLs get through.
 case "$url" in
   http://*|https://*) ;;
-  *) log "not an http(s) URL, refusing: $url"; exit 0 ;;
+  *) log "not an http(s) URL, refusing: $url"; status refused "" "not an http(s) URL"; exit 0 ;;
 esac
 
 if [ -r "$LAST" ] && [ "$(cat "$LAST")" = "$url" ] && is_open; then
   log "dedup hit, $url already open"
+  status deduped
   exit 0
 fi
 
@@ -68,10 +84,12 @@ download() {
   local f
   f="$(mktemp --suffix=".$ext" /tmp/viewdoc-dl.XXXXXXXX)"
   log "download $url -> $f"
+  status downloading "$app"
   if curl -fsSL --max-time 60 -o "$f" "$url"; then
     printf '%s' "$f"
   else
     log "download failed url=$url"
+    status failed "$app" "download failed"
     rm -f "$f"
     return 1
   fi
@@ -80,6 +98,13 @@ download() {
 lower="$(printf '%s' "$url" | tr '[:upper:]' '[:lower:]')"
 path="${lower%%\?*}"; path="${path%%#*}"
 ext="${path##*.}"
+
+# dispatch <app> names the app this request goes to (for logs + status).
+app=""
+dispatch() {
+  app="$1"
+  log "dispatch=$app ext=$ext url=$url"
+}
 
 run() {
   log "exec: $*"
@@ -100,7 +125,7 @@ run() {
     owner=""
     read -r owner _ < "$STATE" 2>/dev/null || true
     if [ "$owner" = "$BASHPID" ]; then
-      printf '%s %s\n' "$BASHPID" "$state" > "$STATE"
+      printf '%s %s %s\n' "$BASHPID" "$state" "$rc" > "$STATE"
     fi
     log "exit: $1 rc=$rc state=$state"
   ) &
@@ -108,17 +133,18 @@ run() {
   # doesn't make the next identical request a no-op.
   printf '%s %s\n' "$!" running > "$STATE"
   printf '%s' "$url" > "$LAST"
+  status launched "${app:-$1}"
 }
 
 case "$ext" in
   mp4|mkv|webm|mov|avi|mpeg|mpg|m4v|3gp|3g2|ts|mts|m2ts|vob|wmv|asf|divx|ogv|mp3|wav|flac|ogg|m4a|aac|opus|mka|wma|aiff|ape|mid)
-    log "dispatch=vlc ext=$ext url=$url"
+    dispatch vlc
     # --no-qt-privacy-ask suppresses VLC's first-run "Privacy and Network
     # Access Policy" modal, which otherwise blocks playback until clicked.
     run vlc --no-qt-privacy-ask --no-video-title-show "$url"
     ;;
   doc|docx|odt|rtf|xls|xlsx|ods|csv|ppt|pptx|odp|odg|vsd|vsdx|pub|pages|key|numbers)
-    log "dispatch=soffice ext=$ext url=$url"
+    dispatch soffice
     # soffice handles http(s) URLs natively via UCB. --view opens read-only,
     # --norestore kills the "recover document?" prompt after a previous
     # session, --nologo suppresses the splash. Visio / Publisher / Apple
@@ -130,13 +156,13 @@ case "$ext" in
     # open. curl runs synchronously here because the sidecar already forked
     # viewdoc.sh as a separate process, so blocking here doesn't delay the
     # sidecar's HTTP response. RAR5 needs unrar (p7zip-full only reads RAR4).
-    log "dispatch=xarchiver ext=$ext url=$url"
+    dispatch xarchiver
     if tmpfile="$(download)"; then
       run xarchiver "$tmpfile"
     fi
     ;;
   pcap|pcapng|cap)
-    log "dispatch=wireshark ext=$ext url=$url"
+    dispatch wireshark
     if tmpfile="$(download)"; then
       run wireshark -r "$tmpfile"
     fi
@@ -151,7 +177,7 @@ case "$ext" in
     # rewritten every time because claws-mail saves its own copies on exit.
     cfgdir="/tmp/viewdoc-claws"
     inbox="$cfgdir/Mail/inbox"
-    log "dispatch=claws-mail ext=$ext url=$url"
+    dispatch claws-mail
     if tmpfile="$(download)"; then
       # Outlook .msg is an OLE compound file claws-mail can't read; msgconvert
       # (libemail-outlook-message-perl) rewrites it as MIME first.
@@ -159,6 +185,7 @@ case "$ext" in
         eml="${tmpfile%.msg}.eml"
         if ! msgconvert --outfile "$eml" "$tmpfile" >&2; then
           log "msgconvert failed url=$url"
+          status failed "$app" "msgconvert failed"
           exit 0
         fi
         tmpfile="$eml"
@@ -192,13 +219,13 @@ CFG
   tif|tiff|heic|heif|avif|ico|tga)
     # Formats Chromium won't render. ristretto decodes via gdk-pixbuf, with
     # heif-gdk-pixbuf / libavif-gdk-pixbuf adding HEIC and AVIF.
-    log "dispatch=ristretto ext=$ext url=$url"
+    dispatch ristretto
     if tmpfile="$(download)"; then
       run ristretto "$tmpfile"
     fi
     ;;
   epub|djvu|xps|oxps|cbz|cbr|cb7)
-    log "dispatch=atril ext=$ext url=$url"
+    dispatch atril
     if tmpfile="$(download)"; then
       run atril "$tmpfile"
     fi
@@ -206,7 +233,7 @@ CFG
   txt|log|json|yaml|yml|xml|md|ini|conf|cfg|toml)
     # Downloaded rather than handed to Chromium: servers often send these as
     # application/octet-stream, which Chromium saves instead of showing.
-    log "dispatch=mousepad ext=$ext url=$url"
+    dispatch mousepad
     if tmpfile="$(download)"; then
       run mousepad "$tmpfile"
     fi
@@ -218,19 +245,19 @@ CFG
     fi
     ;;
   dxf)
-    log "dispatch=librecad ext=$ext url=$url"
+    dispatch librecad
     if tmpfile="$(download)"; then
       run librecad "$tmpfile"
     fi
     ;;
   ttf|otf|ttc)
-    log "dispatch=gnome-font-viewer ext=$ext url=$url"
+    dispatch gnome-font-viewer
     if tmpfile="$(download)"; then
       run gnome-font-viewer "$tmpfile"
     fi
     ;;
   bin|exe|dll|so|o|elf|dat|dmp)
-    log "dispatch=ghex ext=$ext url=$url"
+    dispatch ghex
     if tmpfile="$(download)"; then
       run ghex "$tmpfile"
     fi
@@ -244,12 +271,12 @@ CFG
     # the container leaves a stale lock that wedges every new launch).
     for b in chromium chromium-browser google-chrome chrome; do
       if command -v "$b" >/dev/null 2>&1; then
-        log "dispatch=$b ext=$ext url=$url"
+        dispatch "$b"
         run "$b" --no-sandbox --user-data-dir=/tmp/viewdoc-chromium --new-window "$url"
         exit 0
       fi
     done
-    log "dispatch=xdg-open ext=$ext url=$url"
+    dispatch xdg-open
     run xdg-open "$url"
     ;;
 esac
