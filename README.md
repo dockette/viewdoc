@@ -103,8 +103,8 @@ The system exposes two HTTP services. The **control-center** is the public entry
 | Method | Path                         | Purpose                              |
 |--------|------------------------------|--------------------------------------|
 | GET    | `/`                          | UI: iframe + URL bar + slot tabs     |
-| GET    | `/healthz`                   | `{ready, total}` reachability summary |
-| GET    | `/api/slots`                 | slot table with per-slot reachability |
+| GET    | `/healthz`                   | `{ready, total}` — slots whose desktop **and** sidecar answer; 503 when none |
+| GET    | `/api/slots`                 | slot table with per-slot `vnc`, `sidecar` and `ready` flags |
 | POST   | `/api/slot/{i}/params`       | forwards `{params:{url,…}}` to slot `i` |
 | POST   | `/api/slot/{i}/restart`      | restarts slot `i`'s container (requires `Content-Type: application/json`) |
 | ANY    | `/slot/{i}/*`                | reverse-proxy → `<slot[i]>:port` (HTTP + WS) |

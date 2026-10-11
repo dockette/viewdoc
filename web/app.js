@@ -36,7 +36,7 @@
 
   function getSlotState(idx) {
     let s = slotState.get(idx);
-    if (!s) { s = { frame: null, state: 'idle' }; slotState.set(idx, s); }
+    if (!s) { s = { frame: null, state: 'idle', pushedURL: null }; slotState.set(idx, s); }
     return s;
   }
 
@@ -154,6 +154,12 @@
       b.className = `tab tab-${getSlotState(s.idx).state}`;
       if (s.idx === activeSlot) b.classList.add('active');
       b.title = s.ip ? `${s.host} · ${s.ip}` : s.host;
+      // Say which half is down when the desktop is reachable but the sidecar
+      // (which opens files) isn't, or vice versa.
+      if (!s.ready) {
+        const down = [!s.vnc && 'desktop', !s.sidecar && 'sidecar'].filter(Boolean);
+        if (down.length) b.title += ` · ${down.join(' + ')} down`;
+      }
 
       const led = document.createElement('span');
       led.className = 'led';
@@ -185,12 +191,16 @@
     u.searchParams.set('slot', String(i));
     history.replaceState(null, '', u);
 
+    // Open the current ?url= doc in a slot the first time it's shown, not on
+    // every tab switch — re-sending stacks duplicate windows in apps that
+    // hand off to an already-running instance.
     const docURL = u.searchParams.get('url');
-    if (docURL) pushParams({ url: docURL });
+    if (docURL && getSlotState(i).pushedURL !== docURL) pushParams({ url: docURL });
   }
 
   async function pushParams(p) {
     console.log(`[viewdoc] push slot=${activeSlot}`, p);
+    if (p.url) getSlotState(activeSlot).pushedURL = p.url;
     try {
       const r = await fetch(`/api/slot/${activeSlot}/params`, {
         method: 'POST',
