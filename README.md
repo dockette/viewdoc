@@ -227,18 +227,27 @@ Requires Go **1.27.2+** (`go.mod` pins the toolchain; older Go downloads it auto
 ```sh
 make test          # go test ./...
 go vet ./...
-make build         # docker compose build (all three images)
+make build         # build all three images, stamped with VERSION
 make cert          # regenerate the embedded certs/server.{crt,key} for your host IPs
+make version       # print VERSION
+make release       # set VERSION to today's date (see Versions)
 ```
 
-CI (`.github/workflows/docker.yml`) runs `go vet`, `go test -race`, staticcheck, govulncheck, shellcheck and hadolint, then builds every image. Pushes to `master` publish `linux/amd64` + `linux/arm64` images to Docker Hub:
+CI (`.github/workflows/docker.yml`) checks the `VERSION` format and runs `go vet`, `go test -race`, staticcheck, govulncheck, shellcheck and hadolint, then builds every image. Pushes to `master` publish `linux/amd64` + `linux/arm64` images to Docker Hub (see **Versions**). The Kasm and Webtop base images are pinned by digest; Dependabot opens weekly PRs for new digests, Go builder images and GitHub Actions.
 
-| Tag                                      | Meaning                          |
-|------------------------------------------|----------------------------------|
-| `dockette/viewdoc:<variant>`             | latest `master` build            |
-| `dockette/viewdoc:<variant>-<short-sha>` | immutable build of that commit   |
+## Versions
 
-`<variant>` is `control-center`, `viewer-kasm` or `viewer-webtop`. The Kasm and Webtop base images are pinned by digest; Dependabot opens weekly PRs for new digests, Go builder images and GitHub Actions.
+viewdoc is versioned by release date: `YYYY.MM.DD`, or `YYYY.MM.DD.N` for another release on the same day. The current version is in [`VERSION`](VERSION). It is built into both binaries (logged at startup, returned by the control-center's `/healthz` and the sidecar's `/status`) and set as the `org.opencontainers.image.version` label.
+
+| Image tag | Meaning |
+|-----------|---------|
+| `dockette/viewdoc:<variant>` | latest `master` build |
+| `dockette/viewdoc:<variant>-2026.10.11` | release `2026.10.11` — pin this |
+| `dockette/viewdoc:<variant>-<short-sha>` | immutable build of that commit |
+
+`<variant>` is `control-center`, `viewer-kasm` or `viewer-webtop`. Like other dockette images, release tags are rebuilt by the weekly schedule to pick up base-image updates; use the `<short-sha>` tag for a byte-identical image.
+
+To release: `make release` sets `VERSION` to today's date (UTC; `.1`, `.2`, … if that date is already tagged), then commit and push to `master`. Once all images are pushed, CI tags the commit and creates the GitHub release `<VERSION>` with generated notes. A plain `docker compose build` stamps `dev`; `make build` uses `VERSION`.
 
 -----
 

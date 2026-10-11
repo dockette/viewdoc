@@ -20,6 +20,7 @@ import (
 	"github.com/dockette/viewdoc/internal/proxy"
 	"github.com/dockette/viewdoc/internal/slots"
 	"github.com/dockette/viewdoc/internal/tlsself"
+	"github.com/dockette/viewdoc/internal/version"
 )
 
 const (
@@ -31,6 +32,7 @@ const (
 )
 
 func main() {
+	log.Printf("viewdoc control-center %s", version.Version)
 	addr := envOr("LISTEN_ADDR", defaultListenAddr)
 	tlsAddr := envOr("TLS_ADDR", "")
 
