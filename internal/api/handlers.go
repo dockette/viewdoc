@@ -183,6 +183,32 @@ func (h *Handlers) Restart(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, resp.Body)
 }
 
+// Status relays the slot sidecar's GET /status (latest request's phase, app,
+// error, and whether the launched app is still running).
+func (h *Handlers) Status(w http.ResponseWriter, r *http.Request) {
+	idx, err := strconv.Atoi(r.PathValue("idx"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	slot, ok := h.Pool.Get(idx)
+	if !ok {
+		http.Error(w, "slot not found", http.StatusNotFound)
+		return
+	}
+	req, _ := http.NewRequestWithContext(r.Context(), http.MethodGet, slot.SidecarURL()+"/status", nil)
+	resp, err := h.Probe.Do(req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("sidecar unreachable: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
 // paramsForLog renders the sanitized params as space-separated k=v pairs,
 // sorted by key so identical requests log identically, and truncates long
 // values so log lines stay readable.

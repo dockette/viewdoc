@@ -52,6 +52,7 @@ Listens on `:8080` (`LISTEN_ADDR`), plus TLS on `TLS_ADDR` when set.
 | GET    | `/api/slots`             | `{count, slots:[{idx, host, ip, path, vnc, sidecar, ready}]}`. `vnc` = VNC port accepts TCP, `sidecar` = sidecar `/healthz` returns 200 within 1s, `ready` = both. |
 | POST   | `/api/slot/{i}/params`   | Forwarded verbatim to `<slot[i]>:7000/params`. |
 | POST   | `/api/slot/{i}/restart`  | Forwarded to `<slot[i]>:7000/restart` (requires `Content-Type: application/json`). |
+| GET    | `/api/slot/{i}/status`   | Relays `<slot[i]>:7000/status` (1s timeout); 502 when the sidecar is down. |
 | ANY    | `/slot/{i}/*`            | Reverse proxy → `<slot[i]>:<novnc>` (HTTP + WS upgrade). |
 | GET    | `/*`                     | Embedded UI assets from `web/` (`embed.FS`), e.g. `/app.js`, `/style.css`. |
 
@@ -64,6 +65,7 @@ Binds to `:7000` in every viewer image. No auth — compose network is the trust
 | POST   | `/params`   | Validate, atomically write `/tmp/viewdoc.{json,env}`, fork `viewdoc.sh`. |
 | GET    | `/healthz`  | Liveness — plain-text `ok`. |
 | POST   | `/restart`  | Reply 202, exit 42. Kasm's `custom_startup.sh` / Webtop's s6 `finish` turn that into a container exit; the orchestrator restarts it (see README → *Restarting a slot*). |
+| GET    | `/status`   | Latest request: `{phase, url, app, error, updated, app_state, exit_code}`. `phase` is `idle` (none since start), `queued` (set by the sidecar on `POST /params`), then `refused` / `deduped` / `downloading` / `failed` / `launched` from `viewdoc.sh` (via `/tmp/viewdoc.status`). For `launched` / `deduped`, `app_state` is `running` / `handoff` / `exited` from `/tmp/.viewdoc_last_state` (a dead `running` pid reads as `exited`). |
 
 `POST /params` body: `{"params": {"<key>": "<value>", ...}}`. Sanitization: key `^[A-Za-z][A-Za-z0-9_]{0,63}$`, ≤32 keys, ≤4096 bytes/value.
 
@@ -106,6 +108,7 @@ Drive the host page with agent-browser (`fill #url-input` + `click #url-form but
 
 When a file load looks broken, check in order:
 1. `curl -sk <host>/api/slot/<i>/params -d '{"params":{"url":"…"}}'` returns `{"ok":true}` — proves the sidecar wrote `/tmp/viewdoc.{json,env}` and forked the hook.
+   Then `curl -sk <host>/api/slot/<i>/status` says what the hook did (`refused`, `failed` + `error`, `launched` + `app_state`). The UI shows the same next to the buttons.
 2. The browser/VLC window is *open* in the desktop — `viewdoc.sh` skips a URL equal to the last one (`/tmp/.viewdoc_last_url`) while that launch is still open: its process is alive, or it handed off to an already-running instance (exit 0 within 5s, e.g. a second Chromium/LibreOffice window). `/tmp/.viewdoc_last_state` holds `<pid> <running|handoff|exited>`. A failed download, a crash, or closing a VLC/Xarchiver/Wireshark window lets the same URL open again; a closed handed-off window can't be detected, so resubmitting that URL stays a no-op. Downloads land in unique `/tmp/viewdoc-dl.*` files, pruned after a day.
 3. The slot's iframe is actually connected (KasmVNC shows "Connection Terminated: a new primary client connected" at the bottom when a fresh client takes over — that banner is normal, not an error).
 

@@ -107,6 +107,7 @@ The system exposes two HTTP services. The **control-center** is the public entry
 | GET    | `/api/slots`                 | slot table with per-slot `vnc`, `sidecar` and `ready` flags |
 | POST   | `/api/slot/{i}/params`       | forwards `{params:{url,…}}` to slot `i` |
 | POST   | `/api/slot/{i}/restart`      | restarts slot `i`'s container (requires `Content-Type: application/json`) |
+| GET    | `/api/slot/{i}/status`       | what happened to slot `i`'s latest request (see sidecar `/status`) |
 | ANY    | `/slot/{i}/*`                | reverse-proxy → `<slot[i]>:port` (HTTP + WS) |
 | GET    | `/*`                         | embedded UI assets (`/app.js`, `/style.css`) |
 
@@ -179,6 +180,7 @@ VIEWER_SLOTS="kasm://node-1,webtop://node-2"
 | GET    | `/healthz`  | plain-text `ok`                                          |
 | POST   | `/params`   | validate + atomically write `/tmp/viewdoc.{json,env}`, fork `viewdoc.sh` |
 | POST   | `/restart`  | reply 202, then exit with code 42 — the image turns that into a container exit |
+| GET    | `/status`   | latest request: `phase` (`idle`, `queued`, `refused`, `deduped`, `downloading`, `failed`, `launched`), `url`, `app`, `error`, `updated`, and for launched apps `app_state` (`running`, `handoff`, `exited`) + `exit_code` |
 
 #### Environment
 

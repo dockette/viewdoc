@@ -156,6 +156,18 @@ header {
   letter-spacing: 0.3px;
 }
 #url-form button:hover { filter: brightness(1.1); }
+#slot-status {
+  flex: 0 1 auto;
+  max-width: 36ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+#slot-status.status-ok    { color: var(--led-connected); }
+#slot-status.status-busy  { color: var(--led-loading); }
+#slot-status.status-error { color: var(--led-down); }
 #url-form button.danger {
   background: var(--led-down);
 }
