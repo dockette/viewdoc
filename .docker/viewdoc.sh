@@ -30,13 +30,15 @@ log() {
 # status <phase> [app] [error] — records the outcome of this request for the
 # sidecar's GET /status. Never load-bearing, like log().
 status() {
-  {
+  if {
     printf 'phase=%s\n' "$1"
     printf 'url=%s\n' "$(printf '%s' "$url" | tr '\n' ' ')"
     printf 'app=%s\n' "${2:-}"
     printf 'error=%s\n' "${3:-}"
     printf 'updated=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  } > "$STATUS.$$" 2>/dev/null && mv -f "$STATUS.$$" "$STATUS" 2>/dev/null || true
+  } > "$STATUS.$$" 2>/dev/null; then
+    mv -f "$STATUS.$$" "$STATUS" 2>/dev/null || true
+  fi
 }
 
 [ -r "$QUERY_ENV" ] || { log "no $QUERY_ENV; nothing to do"; exit 0; }
