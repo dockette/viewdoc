@@ -67,7 +67,7 @@ Binds to `:7000` in every viewer image. No auth — compose network is the trust
 | POST   | `/restart`  | Reply 202, exit 42. Kasm's `custom_startup.sh` / Webtop's s6 `finish` turn that into a container exit; the orchestrator restarts it (see README → *Restarting a slot*). |
 | GET    | `/status`   | Latest request: `{phase, url, app, error, updated, app_state, exit_code}`. `phase` is `idle` (none since start), `queued` (set by the sidecar on `POST /params`), then `refused` / `deduped` / `downloading` / `failed` / `launched` from `viewdoc.sh` (via `/tmp/viewdoc.status`). For `launched` / `deduped`, `app_state` is `running` / `handoff` / `exited` from `/tmp/.viewdoc_last_state` (a dead `running` pid reads as `exited`). |
 
-`POST /params` body: `{"params": {"<key>": "<value>", ...}}`. Sanitization: key `^[A-Za-z][A-Za-z0-9_]{0,63}$`, ≤32 keys, ≤4096 bytes/value.
+`POST /params` body: `{"params": {"<key>": "<value>", ...}}`. Sanitization (`internal/sanitize`, applied by both the control-center and the sidecar): key `^[A-Za-z][A-Za-z0-9_]{0,63}$`, ≤32 keys, ≤4096 bytes/value, no two keys equal after upper-casing (they'd map to the same `VIEWDOC_Q_*` variable), and `url` (any case) must be an absolute `http://` / `https://` URL with a host — apps get it as a bare argument, so anything else could be read as an option. `viewdoc.sh` repeats the http(s) check.
 
 ## Files (testing)
 
