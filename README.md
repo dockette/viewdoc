@@ -242,7 +242,7 @@ viewdoc is versioned by release date: `YYYY.MM.DD`, or `YYYY.MM.DD.N` for anothe
 | Image tag | Meaning |
 |-----------|---------|
 | `dockette/viewdoc:<variant>` | latest `master` build |
-| `dockette/viewdoc:<variant>-2026.10.11` | release `2026.10.11` — pin this |
+| `dockette/viewdoc:<variant>-2026.10.12` | release `2026.10.12` — pin this |
 | `dockette/viewdoc:<variant>-<short-sha>` | immutable build of that commit |
 
 `<variant>` is `control-center`, `viewer-kasm` or `viewer-webtop`. Like other dockette images, release tags are rebuilt by the weekly schedule to pick up base-image updates; use the `<short-sha>` tag for a byte-identical image.
