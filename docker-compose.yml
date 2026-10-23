@@ -9,6 +9,9 @@ x-kasm: &kasm
     # CLI flag is the only supported path.
     VNC_PW: "viewdoc"
     VNCOPTIONS: "-disableBasicAuth"
+    # Skip Kasm's smartcard bridge: viewdoc never forwards a reader, and the
+    # bridge otherwise logs "bridge->relay: timeout" every ~7.5s.
+    KASM_SVC_SMARTCARD: "0"
   networks: [viewdoc]
   restart: unless-stopped
 
