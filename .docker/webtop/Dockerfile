@@ -12,7 +12,7 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X gith
 
 # Base pinned by digest for reproducible builds; Dependabot bumps it
 # (.github/dependabot.yml).
-FROM lscr.io/linuxserver/webtop:ubuntu-xfce@sha256:51cc1e6fa00ffbd41c05b61bb3b36f30dd68e35206501407fe6980ffd1d56982
+FROM lscr.io/linuxserver/webtop:ubuntu-xfce@sha256:278797c03b62454aaf05cd1fdeb35dbdc822846855020f9e5233f508a89980d9
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG VERSION=dev
 LABEL org.opencontainers.image.version=$VERSION
